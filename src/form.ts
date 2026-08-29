@@ -24,7 +24,7 @@ export class Form<T extends FieldValues = FieldValues> {
   private readonly options: Required<Pick<FormOptions<T>, 'mode' | 'reValidateMode' | 'disabled'>> & FormOptions<T>;
   private readonly fieldOptions = new Map<string, RegisterOptions<T>>();
   private readonly listeners = new Set<(values: T, info: { name?: string }) => void>();
-  private readonly validationRuns = new Map<string, number>();
+  private validationVersion = 0;
 
   constructor(options?: FormOptions<T>);
   constructor(options: FormOptions<T> = {}) {
@@ -132,9 +132,7 @@ export class Form<T extends FieldValues = FieldValues> {
 
   async trigger(name?: FieldPath<T> | FieldPath<T>[]): Promise<boolean> {
     const paths = name ? (Array.isArray(name) ? name : [name]).map(String) : undefined;
-    const validationKey = paths?.join('|') ?? '*';
-    const run = (this.validationRuns.get(validationKey) ?? 0) + 1;
-    this.validationRuns.set(validationKey, run);
+    const run = ++this.validationVersion;
     for (const path of paths ?? this.fieldOptions.keys()) {
       this.validatingFields[path] = true;
       this.ensureFieldState(path).isValidating = true;
@@ -144,15 +142,15 @@ export class Form<T extends FieldValues = FieldValues> {
       const validationPaths = paths ?? [...new Set([...this.fieldOptions.keys(), ...Object.keys(this.errors), ...Object.keys(schemaErrors)])];
       runInAction(() => {
         for (const path of validationPaths) {
-          const error = schemaErrors[path] ?? this.validateRules(path);
-          if (error instanceof Promise) continue;
-          if (this.validationRuns.get(validationKey) === run) this.applyError(path, error);
+          if (this.validationVersion === run && schemaErrors[path]) {
+            this.applyError(path, schemaErrors[path]);
+          }
         }
       });
       for (const path of validationPaths) {
         const ruleError = await this.validateRules(path);
         runInAction(() => {
-          if (this.validationRuns.get(validationKey) === run) {
+          if (this.validationVersion === run) {
             if (ruleError) this.applyError(path, ruleError);
             else if (schemaErrors[path]) this.applyError(path, schemaErrors[path]);
             else this.applyError(path, undefined);
@@ -162,7 +160,7 @@ export class Form<T extends FieldValues = FieldValues> {
       return (paths ?? Object.keys(this.errors)).every((path) => !this.errors[path]);
     } finally {
       runInAction(() => {
-        if (this.validationRuns.get(validationKey) === run) {
+        if (this.validationVersion === run) {
           for (const path of paths ?? this.fieldOptions.keys()) {
             delete this.validatingFields[path];
             this.ensureFieldState(path).isValidating = false;
@@ -193,6 +191,12 @@ export class Form<T extends FieldValues = FieldValues> {
   }
 
   reset(values?: Partial<T>, options: ResetOptions = {}): void {
+    this.validationVersion += 1;
+    for (const path of Object.keys(this.validatingFields)) {
+      delete this.validatingFields[path];
+      const state = this.fieldState[path];
+      if (state) state.isValidating = false;
+    }
     const next = clone((values ?? this.defaultValues) as T);
     this.values = next;
     if (!options.keepDefaultValues && values) Object.assign(this.defaultValues, clone(values));

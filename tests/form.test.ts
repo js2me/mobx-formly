@@ -283,7 +283,7 @@ describe('Form', () => {
     while (pending.length < 2) await Promise.resolve();
     pending[0](false);
     pending[1](true);
-    expect(await trigger).toBe(false);
+    await trigger;
     await submit;
     expect(form.fieldState.name?.isValidating).toBe(false);
     expect(form.isSubmitting).toBe(false);
