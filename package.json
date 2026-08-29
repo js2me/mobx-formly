@@ -1,0 +1,43 @@
+{
+  "name": "mobx-formly",
+  "version": "1.0.0",
+  "description": "React-hook-form-inspired observable forms for MobX",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "docs:dev": "docusite dev",
+    "docs:build": "docusite build",
+    "docs:preview": "docusite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "mobx": "^6.12.4 || ^7.0.0",
+    "zod": "^3.0.0 || ^4.0.0"
+  },
+  "type": "module",
+  "dependencies": {
+    "mobx": "^6.16.1",
+    "yummies": "^7.20.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "docusite": "^0.2.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
