@@ -22,6 +22,23 @@ form.errors.username
 form.fieldState.username.error
 ```
 
+## Valibot schemas
+
+Valibot schemas are accepted directly through the same `FormSchema` interface. No Valibot runtime is loaded unless the application uses it:
+
+```ts
+import * as v from 'valibot'
+
+const form = new Form({
+  defaultValues: { email: '' },
+  schema: v.object({
+    email: v.pipe(v.string(), v.email('Enter a valid email')),
+  }),
+})
+```
+
+Valibot issues are normalized to the same `form.errors` and `form.fieldState` shape as Zod issues.
+
 Nested paths use dot notation, for example `profile.email`.
 
 ## Validation modes

@@ -1,7 +1,29 @@
 import type { Ref } from 'yummies/mobx';
-import type { ZodType } from 'zod';
 
 export type FieldValues = Record<string, unknown>;
+export interface SchemaIssue {
+  code?: string;
+  type?: string;
+  path?: Array<PropertyKey | { key: PropertyKey }>;
+  message: string;
+}
+
+export type SchemaResult<T> =
+  | { success: true; data: T }
+  | { success: false; error: { issues: SchemaIssue[] } };
+
+/** Safe-parse-compatible schema contract. */
+export interface SafeParseFormSchema<T> {
+  safeParseAsync(value: unknown): Promise<SchemaResult<T>>;
+}
+
+/** Valibot-compatible schema contract. */
+export interface ValibotFormSchema<T> {
+  '~run': (...args: any[]) => unknown;
+}
+
+/** Schema contract accepted by Form. Both Zod and Valibot schemas fit this interface. */
+export type FormSchema<T> = SafeParseFormSchema<T> | ValibotFormSchema<T>;
 /** Dot-separated path into the form value tree, for example `user.email`. */
 export type FieldPath<T extends FieldValues = FieldValues> = string;
 
@@ -75,7 +97,7 @@ export interface ResetOptions {
 export interface FormOptions<T extends FieldValues> {
   defaultValues?: Partial<T>;
   values?: Partial<T>;
-  schema?: ZodType<T>;
+  schema?: FormSchema<T>;
   mode?: 'onSubmit' | 'onChange' | 'onBlur' | 'all';
   reValidateMode?: 'onChange' | 'onBlur';
   disabled?: boolean;

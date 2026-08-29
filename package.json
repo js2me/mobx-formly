@@ -1,6 +1,6 @@
 {
   "name": "mobx-formly",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "React-hook-form-inspired observable forms for MobX",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -26,19 +26,30 @@
   ],
   "peerDependencies": {
     "mobx": "^6.12.4 || ^7.0.0",
+    "valibot": "^1.0.0",
     "zod": "^3.0.0 || ^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    },
+    "valibot": {
+      "optional": true
+    }
   },
   "type": "module",
   "packageManager": "pnpm@11.24.0",
   "dependencies": {
     "mobx": "^6.16.1",
-    "yummies": "^7.20.1",
-    "zod": "^4.4.3"
+    "yummies": "^7.20.1"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.1",
     "docusite": "^0.2.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11"
+    "valibot": "^1.4.2",
+    "vitest": "^4.1.11",
+    "zod": "^4.4.3"
   }
 }

@@ -3,10 +3,20 @@
 ## Installation
 
 ```bash
-pnpm add mobx-formly mobx zod
+pnpm add mobx-formly mobx
 ```
 
-`mobx` and `zod` are peer dependencies. Zod is only required when using schemas.
+`mobx` is a peer dependency. Install Zod only if you want schema validation:
+
+```bash
+pnpm add zod
+```
+
+Valibot is also supported as an optional alternative:
+
+```bash
+pnpm add valibot
+```
 
 ## Create a form
 
@@ -29,7 +39,7 @@ const form = new Form({
 
 ## Register fields
 
-`register()` returns handlers and a MobX-aware ref from `yummies/mobx`:
+`register()` returns event handlers and a MobX-aware field ref:
 
 ```ts
 const email = form.register('email')

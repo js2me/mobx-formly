@@ -1,6 +1,7 @@
 import { autorun } from 'mobx';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import * as v from 'valibot';
 import { Form } from '../src/index.js';
 
 describe('Form', () => {
@@ -54,5 +55,18 @@ describe('Form', () => {
     expect(form.values).toEqual({ age: 1 });
     expect(form.fieldState.age?.isDirty).toBe(false);
     unsubscribe();
+  });
+
+  it('accepts Valibot schemas through FormSchema', async () => {
+    const form = new Form({
+      defaultValues: { email: '' },
+      schema: v.object({ email: v.pipe(v.string(), v.email('Invalid email')) }),
+    });
+
+    expect(await form.trigger()).toBe(false);
+    expect(form.errors.email?.type).toBe('email');
+
+    form.setValue('email', 'ada@example.test');
+    expect(await form.trigger()).toBe(true);
   });
 });

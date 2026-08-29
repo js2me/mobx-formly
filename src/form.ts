@@ -1,8 +1,7 @@
 import { action, computed, makeObservable, observable, runInAction } from 'mobx';
 import { createRef, type Ref } from 'yummies/mobx';
-import type { ZodError } from 'zod';
 import type {
-  FieldError, FieldErrors, FieldPath, FieldState, FieldStateTree, FieldValues, FormOptions,
+  FieldError, FieldErrors, FieldPath, FieldState, FieldStateTree, FieldValues, FormOptions, SchemaIssue,
   RegisterOptions, RegisterReturn, ResetOptions, SetValueConfig, SubmitHandlers,
 } from './types.js';
 import { clone, deleteAtPath, extractValue, getAtPath, isEqual, setAtPath } from './utils.js';
@@ -232,14 +231,21 @@ export class Form<T extends FieldValues = FieldValues> {
   }
   private async validateSchema(): Promise<FieldErrors<T>> {
     if (!this.options.schema) return {};
-    const result = await this.options.schema.safeParseAsync(this.snapshot());
+    const schema = this.options.schema;
+    const result = ('safeParseAsync' in schema
+      ? await schema.safeParseAsync(this.snapshot())
+      : await schema['~run']({ value: this.snapshot(), typed: false }, {})) as {
+        success: boolean;
+        error?: { issues: SchemaIssue[] };
+      };
     if (result.success) return {};
-    return this.zodErrors(result.error);
+    const issues = result.error?.issues ?? (result as { issues?: SchemaIssue[] }).issues ?? [];
+    return this.normalizeSchemaErrors({ issues });
   }
-  private zodErrors(error: ZodError): FieldErrors<T> {
+  private normalizeSchemaErrors(error: { issues: SchemaIssue[] }): FieldErrors<T> {
     return error.issues.reduce<FieldErrors<T>>((errors, issue) => {
-      const path = issue.path.map(String).join('.') || 'root';
-      if (!errors[path]) errors[path] = { type: issue.code, message: issue.message };
+      const path = (issue.path ?? []).map((part) => String(typeof part === 'object' ? part.key : part)).join('.') || 'root';
+      if (!errors[path]) errors[path] = { type: issue.code ?? issue.type ?? 'validation', message: issue.message };
       return errors;
     }, {});
   }
