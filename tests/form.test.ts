@@ -40,22 +40,16 @@ describe('Form', () => {
     expect(form.isDirty).toBe(true);
   });
 
-  it('provides RHF-like registration, reset, subscriptions, and refs', async () => {
+  it('provides RHF-like registration, reset, and refs', async () => {
     const form = new Form({ defaultValues: { age: 1 }, mode: 'onChange' });
     const register = form.register('age', { valueAsNumber: true, min: { value: 18, message: 'Too young' } });
-    const listener = vi.fn();
-    const unsubscribe = form.subscribe(listener);
-
     await register.onChange({ target: { value: '17' } });
     expect(form.values.age).toBe(17);
     expect(form.errors.age).toEqual({ type: 'min', message: 'Too young' });
     expect(form.refs.get('age')).toBe(register.ref);
-    expect(listener).toHaveBeenCalledWith({ age: 17 }, { name: 'age' });
-
     form.reset();
     expect(form.values).toEqual({ age: 1 });
     expect(form.fieldState.age?.isDirty).toBe(false);
-    unsubscribe();
   });
 
   it('accepts Valibot schemas through FormSchema', async () => {
@@ -129,7 +123,7 @@ describe('Form', () => {
     expect('extra' in form.values).toBe(false);
   });
 
-  it('supports subscriptions, focus refs, select events, and custom schemas', async () => {
+  it('supports focus refs, select events, and custom schemas', async () => {
     const form = createForm({
       defaultValues: { choice: '', active: false },
       schema: { safeParseAsync: async (value: unknown) => ({ success: true as const, data: value as { choice: string; active: boolean } }) },
@@ -147,8 +141,6 @@ describe('Form', () => {
     await choice.onChange({ target: select });
     expect(form.values.choice).toBe('one');
     expect(await form.trigger()).toBe(true);
-    const unsub = form.subscribe(() => undefined);
-    unsub();
     form.reset(undefined, { keepDefaultValues: true });
   });
 

@@ -23,7 +23,6 @@ export class Form<T extends FieldValues = FieldValues> {
   private readonly defaultValues: T;
   private readonly options: Required<Pick<FormOptions<T>, 'mode' | 'reValidateMode' | 'disabled'>> & FormOptions<T>;
   private readonly fieldOptions = new Map<string, RegisterOptions<T>>();
-  private readonly listeners = new Set<(values: T, info: { name?: string }) => void>();
   private validationVersion = 0;
 
   constructor(options?: FormOptions<T>);
@@ -50,6 +49,7 @@ export class Form<T extends FieldValues = FieldValues> {
       fieldState: observable.deep,
       isDirty: computed,
       isValid: computed,
+      snapshot: computed,
       register: action,
       unregister: action,
       setValue: action,
@@ -60,7 +60,6 @@ export class Form<T extends FieldValues = FieldValues> {
       reset: action,
       resetField: action,
       setFocus: action,
-      subscribe: action,
     });
   }
 
@@ -105,7 +104,6 @@ export class Form<T extends FieldValues = FieldValues> {
     delete this.fieldState[path];
     this.fieldOptions.delete(path);
     this.refs.delete(path);
-    this.notify(path);
   }
 
   setValue<P extends FieldPath<T>>(name: P, value: FieldPathValue<T, P>, config: SetValueConfig = {}): void {
@@ -113,7 +111,6 @@ export class Form<T extends FieldValues = FieldValues> {
     setAtPath(this.values, path, value);
     if (config.shouldDirty ?? true) this.updateDirty(path);
     if (config.shouldTouch) this.markTouched(path);
-    this.notify(path);
     if (config.shouldValidate) void this.trigger(path);
   }
 
@@ -178,7 +175,7 @@ export class Form<T extends FieldValues = FieldValues> {
       try {
         const valid = await this.trigger();
         if (valid) {
-          await onValid(this.snapshot(), this);
+          await onValid(this.snapshot, this);
           runInAction(() => { this.isSubmitSuccessful = true; });
         } else {
           await onInvalid?.(this.errors, this);
@@ -212,7 +209,6 @@ export class Form<T extends FieldValues = FieldValues> {
       state.isDirty = !!this.dirtyFields[path];
       state.isTouched = !!this.touchedFields[path];
     }
-    this.notify();
   }
 
   resetField(name: FieldPath<T>): void {
@@ -220,18 +216,11 @@ export class Form<T extends FieldValues = FieldValues> {
     setAtPath(this.values, path, clone(getAtPath(this.defaultValues, path)));
     delete this.errors[path]; delete this.dirtyFields[path]; delete this.touchedFields[path];
     this.applyFieldState(this.ensureFieldState(path), undefined);
-    this.notify(path);
   }
 
   setFocus(name: FieldPath<T>): void { this.refs.get(name as string)?.current?.focus(); }
 
-  subscribe(listener: (values: T, info: { name?: string }) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  private snapshot(): T { return clone(this.values); }
-  private notify(name?: string): void { for (const listener of this.listeners) listener(this.snapshot(), { name }); }
+  get snapshot(): T { return clone(this.values); }
   private markTouched(path: string): void {
     this.touchedFields[path] = true;
     this.ensureFieldState(path).isTouched = true;
@@ -252,11 +241,11 @@ export class Form<T extends FieldValues = FieldValues> {
     if (!this.options.schema) return {};
     const schema = this.options.schema;
     if ('safeParseAsync' in schema) {
-      const result = await schema.safeParseAsync(this.snapshot()) as SchemaResult<T>;
+      const result = await schema.safeParseAsync(this.snapshot) as SchemaResult<T>;
       if (result.success) return {};
       return this.normalizeSchemaErrors(result.error);
     }
-    const result = await schema['~run']({ value: this.snapshot(), typed: false }, {}) as ValibotRunResult<T>;
+    const result = await schema['~run']({ value: this.snapshot, typed: false }, {}) as ValibotRunResult<T>;
     if (!result.issues?.length) return {};
     return this.normalizeSchemaErrors({ issues: result.issues });
   }
@@ -281,7 +270,7 @@ export class Form<T extends FieldValues = FieldValues> {
     if (rules.validate) {
       let result: boolean | string;
       try {
-        result = await rules.validate(value, this.snapshot());
+        result = await rules.validate(value, this.snapshot);
       } catch {
         return { type: 'validate', message: 'Validation failed' };
       }

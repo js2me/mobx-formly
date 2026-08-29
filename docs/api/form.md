@@ -43,4 +43,3 @@ new Form({
 | `reset(values?, options?)` | Resets the form. |
 | `resetField(name)` | Resets one field to its default. |
 | `setFocus(name)` | Focuses the field ref when available. |
-| `subscribe(listener)` | Subscribes non-MobX code to value changes. |

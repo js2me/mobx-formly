@@ -25,11 +25,3 @@ form.isValid
 ## Plain values for side effects
 
 `handleSubmit` passes a cloned plain object to `onValid`. This makes it safe to hand values to an API client without exposing the observable object directly.
-
-For non-MobX consumers, use `subscribe`:
-
-```ts
-const unsubscribe = form.subscribe((values, info) => {
-  console.log(info.name, values)
-})
-```
