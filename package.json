@@ -1,6 +1,6 @@
 {
   "name": "mobx-formly",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "description": "React-hook-form-inspired observable forms for MobX",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
