@@ -1,18 +1,19 @@
 import { action, computed, makeObservable, observable, runInAction } from 'mobx';
 import { createRef, type Ref } from 'yummies/mobx';
 import type {
-  FieldError, FieldErrors, FieldPath, FieldState, FieldStateTree, FieldValues, FormOptions, SchemaIssue,
+  FieldError, FieldErrors, FieldPath, FieldPathValue, FieldState, FieldStateTree, FieldValues, FormOptions, FormSchema, SchemaIssue,
+  SchemaOutput, SchemaResult, ValibotRunResult,
   RegisterOptions, RegisterReturn, ResetOptions, SetValueConfig, SubmitHandlers,
 } from './types.js';
 import { clone, deleteAtPath, extractValue, getAtPath, isEqual, setAtPath } from './utils.js';
 
 export class Form<T extends FieldValues = FieldValues> {
   values: T;
-  errors: FieldErrors<T> = {};
-  dirtyFields: Partial<Record<FieldPath<T>, true>> = {};
-  touchedFields: Partial<Record<FieldPath<T>, true>> = {};
-  validatingFields: Partial<Record<FieldPath<T>, true>> = {};
-  fieldState: FieldStateTree<T> = {};
+  errors: Record<string, FieldError | undefined> = {};
+  dirtyFields: Record<string, true | undefined> = {};
+  touchedFields: Record<string, true | undefined> = {};
+  validatingFields: Record<string, true | undefined> = {};
+  fieldState: Record<string, FieldState | undefined> = {};
   isSubmitting = false;
   isSubmitted = false;
   isSubmitSuccessful = false;
@@ -24,6 +25,7 @@ export class Form<T extends FieldValues = FieldValues> {
   private readonly fieldOptions = new Map<string, RegisterOptions<T>>();
   private readonly listeners = new Set<(values: T, info: { name?: string }) => void>();
 
+  constructor(options?: FormOptions<T>);
   constructor(options: FormOptions<T> = {}) {
     this.options = {
       ...options,
@@ -64,7 +66,7 @@ export class Form<T extends FieldValues = FieldValues> {
   get isValid(): boolean { return Object.keys(this.errors).length === 0; }
 
   register(name: FieldPath<T>, options: RegisterOptions<T> = {}): RegisterReturn {
-    const path = name as string;
+    const path = name as FieldPath<T> & string;
     this.fieldOptions.set(path, options);
     let ref = this.refs.get(path);
     if (!ref) {
@@ -78,7 +80,7 @@ export class Form<T extends FieldValues = FieldValues> {
       onChange: async (eventOrValue) => {
         const value = this.transformValue(extractValue(eventOrValue), options);
         const shouldValidate = this.shouldValidateOnChange(path);
-        this.setValue(path, value, { shouldDirty: true, shouldValidate: false });
+        this.setValue(path, value as FieldPathValue<T, typeof path>, { shouldDirty: true, shouldValidate: false });
         if (shouldValidate) await this.trigger(path);
       },
       onBlur: async () => {
@@ -89,7 +91,7 @@ export class Form<T extends FieldValues = FieldValues> {
   }
 
   unregister(name: FieldPath<T>): void {
-    const path = name as string;
+    const path = name as FieldPath<T> & string;
     deleteAtPath(this.values, path);
     delete this.errors[path];
     delete this.dirtyFields[path];
@@ -101,8 +103,8 @@ export class Form<T extends FieldValues = FieldValues> {
     this.notify(path);
   }
 
-  setValue(name: FieldPath<T>, value: unknown, config: SetValueConfig = {}): void {
-    const path = name as string;
+  setValue<P extends FieldPath<T>>(name: P, value: FieldPathValue<T, P>, config: SetValueConfig = {}): void {
+    const path = name as FieldPath<T> & string;
     setAtPath(this.values, path, value);
     if (config.shouldDirty ?? true) this.updateDirty(path);
     if (config.shouldTouch) this.markTouched(path);
@@ -111,7 +113,7 @@ export class Form<T extends FieldValues = FieldValues> {
   }
 
   setError(name: FieldPath<T>, error: FieldError): void {
-    this.applyError(name as string, error);
+    this.applyError(name as FieldPath<T> & string, error);
   }
 
   clearErrors(name?: FieldPath<T> | FieldPath<T>[]): void {
@@ -120,7 +122,7 @@ export class Form<T extends FieldValues = FieldValues> {
       for (const state of Object.values(this.fieldState)) if (state) this.applyFieldState(state, undefined);
       return;
     }
-    for (const path of Array.isArray(name) ? name : [name]) this.applyError(path as string, undefined);
+    for (const path of Array.isArray(name) ? name : [name]) this.applyError(path as FieldPath<T> & string, undefined);
   }
 
   async trigger(name?: FieldPath<T> | FieldPath<T>[]): Promise<boolean> {
@@ -232,15 +234,14 @@ export class Form<T extends FieldValues = FieldValues> {
   private async validateSchema(): Promise<FieldErrors<T>> {
     if (!this.options.schema) return {};
     const schema = this.options.schema;
-    const result = ('safeParseAsync' in schema
-      ? await schema.safeParseAsync(this.snapshot())
-      : await schema['~run']({ value: this.snapshot(), typed: false }, {})) as {
-        success: boolean;
-        error?: { issues: SchemaIssue[] };
-      };
-    if (result.success) return {};
-    const issues = result.error?.issues ?? (result as { issues?: SchemaIssue[] }).issues ?? [];
-    return this.normalizeSchemaErrors({ issues });
+    if ('safeParseAsync' in schema) {
+      const result = await schema.safeParseAsync(this.snapshot()) as SchemaResult<T>;
+      if (result.success) return {};
+      return this.normalizeSchemaErrors(result.error);
+    }
+    const result = await schema['~run']({ value: this.snapshot(), typed: false }, {}) as ValibotRunResult<T>;
+    if (!result.issues?.length) return {};
+    return this.normalizeSchemaErrors({ issues: result.issues });
   }
   private normalizeSchemaErrors(error: { issues: SchemaIssue[] }): FieldErrors<T> {
     return error.issues.reduce<FieldErrors<T>>((errors, issue) => {

@@ -19,20 +19,46 @@ export interface SafeParseFormSchema<T> {
 
 /** Valibot-compatible schema contract. */
 export interface ValibotFormSchema<T> {
-  '~run': (...args: any[]) => unknown;
+  readonly '~types'?: { readonly output: T };
+  '~run': (...args: any[]) => any;
+}
+
+export interface ValibotRunResult<T> {
+  success?: boolean;
+  value?: T;
+  issues?: SchemaIssue[];
 }
 
 /** Schema contract accepted by Form. Both Zod and Valibot schemas fit this interface. */
 export type FormSchema<T> = SafeParseFormSchema<T> | ValibotFormSchema<T>;
+
+export type SchemaOutput<S> = S extends SafeParseFormSchema<infer T>
+  ? T
+  : S extends { readonly '~types'?: { readonly output: infer T } }
+    ? T
+    : never;
 /** Dot-separated path into the form value tree, for example `user.email`. */
-export type FieldPath<T extends FieldValues = FieldValues> = string;
+export type FieldPath<T = FieldValues> = {
+  [K in Extract<keyof T, string>]: T[K] extends readonly unknown[]
+    ? K
+    : T[K] extends object
+      ? K | `${K}.${FieldPath<T[K]>}`
+      : K
+}[Extract<keyof T, string>];
+
+export type FieldPathValue<T, P extends string> =
+  P extends `${infer K}.${infer Rest}`
+    ? K extends keyof T
+      ? FieldPathValue<T[K], Rest>
+      : never
+    : P extends keyof T ? T[P] : never;
 
 export interface FieldError {
   type: string;
   message?: string;
 }
 
-export type FieldErrors<T extends FieldValues = FieldValues> = Partial<Record<FieldPath<T>, FieldError>>;
+export type FieldErrors<T extends FieldValues = FieldValues> = Record<string, FieldError | undefined>;
 
 export interface FieldState {
   invalid: boolean;
@@ -42,7 +68,7 @@ export interface FieldState {
   error?: FieldError;
 }
 
-export type FieldStateTree<T extends FieldValues = FieldValues> = Partial<Record<FieldPath<T>, FieldState>>;
+export type FieldStateTree<T extends FieldValues = FieldValues> = Record<string, FieldState | undefined>;
 
 export interface FormState<T extends FieldValues = FieldValues> {
   errors: FieldErrors<T>;

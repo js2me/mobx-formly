@@ -37,6 +37,15 @@ const form = new Form({
 })
 ```
 
+`Form` infers the form value type from either a Zod or Valibot schema. This powers autocomplete and validation for field paths:
+
+```ts
+form.register('email')
+form.setValue('email', 'ada@example.com')
+// form.register('unknown') // TypeScript error
+// form.setValue('email', 123) // TypeScript error
+```
+
 ## Register fields
 
 `register()` returns event handlers and a MobX-aware field ref:

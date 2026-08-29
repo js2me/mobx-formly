@@ -51,7 +51,7 @@ await form.handleSubmit({
 - Explicit MobX `makeObservable` wiring.
 - Stable, granular `fieldState[name]` branches.
 - Zod `safeParseAsync` support, including async refinements.
-- Valibot schema support through the same `FormSchema` interface.
+  - Valibot schema support through the same `FormSchema` interface.
 - Field rules such as `required`, `minLength`, `pattern`, and `validate`.
 - MobX-aware refs from [`yummies/mobx`](https://github.com/js2me/yummies).
 - Framework agnostic: usable with React, Vue, Solid, or plain TypeScript.
