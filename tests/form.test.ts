@@ -308,4 +308,43 @@ describe('Form', () => {
     expect(await form.trigger('email')).toBe(true);
     expect(form.errors.email).toBeUndefined();
   });
+
+  it('updates array fields at runtime without replacing the array', () => {
+    const form = new Form<{ items: Array<{ name: string; quantity: number }> }>({
+      defaultValues: { items: [{ name: 'One', quantity: 1 }, { name: 'Two', quantity: 2 }] },
+    });
+
+    form.register('items.0.name');
+    form.register('items.1.quantity');
+    form.setValue('items.0.name', 'Updated');
+    form.setValue('items.1.quantity', 5);
+
+    expect(Array.isArray(form.values.items)).toBe(true);
+    expect(form.values.items).toEqual([{ name: 'Updated', quantity: 1 }, { name: 'Two', quantity: 5 }]);
+    expect(form.fieldState['items.0.name']?.isDirty).toBe(true);
+  });
+
+  it('runs complex asynchronous schema refinements and maps every issue', async () => {
+    const schema = z.object({
+      username: z.string(),
+      confirmation: z.string(),
+    }).superRefine(async (value, context) => {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      if (value.username === 'taken') context.addIssue({ code: 'custom', path: ['username'], message: 'Username is taken' });
+      if (value.confirmation !== value.username) context.addIssue({ code: 'custom', path: ['confirmation'], message: 'Does not match' });
+    });
+    const form = new Form({
+      values: { username: 'taken', confirmation: 'other' },
+      schema,
+    });
+
+    expect(await form.trigger()).toBe(false);
+    expect(form.errors.username?.message).toBe('Username is taken');
+    expect(form.errors.confirmation?.message).toBe('Does not match');
+    form.setValue('username', 'available');
+    form.setValue('confirmation', 'available');
+    expect(await form.trigger()).toBe(true);
+    expect(form.errors.username).toBeUndefined();
+    expect(form.errors.confirmation).toBeUndefined();
+  });
 });

@@ -20,10 +20,11 @@ export const getAtPath = (source: unknown, path: string): unknown =>
 export const setAtPath = (target: Record<string, unknown>, path: string, value: unknown): void => {
   const keys = path.split('.');
   let current: Record<string, unknown> = target;
-  for (const key of keys.slice(0, -1)) {
+  for (const [index, key] of keys.slice(0, -1).entries()) {
     if (isUnsafeProperty(key)) return;
     const next = current[key];
-    if (!next || typeof next !== 'object' || Array.isArray(next)) current[key] = {};
+    const nextKey = keys[index + 1];
+    if (!next || typeof next !== 'object') current[key] = /^\d+$/.test(nextKey) ? [] : {};
     current = current[key] as Record<string, unknown>;
   }
   const lastKey = keys.at(-1);
