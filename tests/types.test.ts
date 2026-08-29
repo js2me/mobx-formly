@@ -39,3 +39,17 @@ test('infers field types and paths from Valibot schemas', () => {
   // @ts-expect-error Field values are checked against their path.
   form.setValue('settings.enabled', 'false');
 });
+
+test('infers array field paths and values', () => {
+  const form = new Form<{ items: Array<{ label: string; count: number }> }>({
+    defaultValues: { items: [{ label: '', count: 0 }] },
+  });
+
+  form.register('items');
+  form.register('items.0.label');
+  form.setValue('items.0.count', 1);
+  // @ts-expect-error Array item fields must exist.
+  form.register('items.0.missing');
+  // @ts-expect-error Array item values are checked by path.
+  form.setValue('items.0.count', '1');
+});

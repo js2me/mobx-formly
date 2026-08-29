@@ -169,4 +169,143 @@ describe('Form', () => {
     expect(extractValue({ target: { type: 'radio', checked: false, value: 'no' } })).toBeUndefined();
     expect(extractValue({ target: { type: 'radio', checked: true, value: 'yes' } })).toBe('yes');
   });
+
+  it('supports constructor values and disabled forms', async () => {
+    const form = new Form({ values: { name: 'Ada' }, disabled: true, mode: 'onChange' });
+    expect(form.values.name).toBe('Ada');
+    expect(form.disabled).toBe(true);
+    const field = form.register('name', { required: true });
+    await field.onChange({ target: { value: '' } });
+    await field.onBlur();
+    expect(form.values.name).toBe('Ada');
+    expect(form.fieldState.name).toMatchObject({ isTouched: false, isValidating: false });
+
+    form.setValue('name', 'Grace');
+    expect(form.values.name).toBe('Grace');
+  });
+
+  it('ignores stale async validation results', async () => {
+    const pending: Array<(result: boolean) => void> = [];
+    const form = new Form<{ name: string }>({
+      values: { name: '' },
+      schema: {
+        safeParseAsync: () => new Promise((resolve) => {
+          pending.push((valid) => resolve(valid
+            ? { success: true, data: { name: 'valid' } }
+            : { success: false, error: { issues: [{ code: 'custom', path: ['name'], message: 'Stale' }] } }));
+        }),
+      },
+    });
+    form.register('name');
+
+    const first = form.trigger('name');
+    const second = form.trigger('name');
+    while (pending.length < 2) await Promise.resolve();
+    expect(form.fieldState.name?.isValidating).toBe(true);
+    pending[1](true);
+    expect(await second).toBe(true);
+    pending[0](false);
+    expect(await first).toBe(true);
+    expect(form.errors.name).toBeUndefined();
+    expect(form.fieldState.name?.isValidating).toBe(false);
+  });
+
+  it('normalizes rejected async validators into field errors', async () => {
+    const form = new Form({ values: { name: 'Ada' } });
+    form.register('name', { validate: async () => { throw new Error('network'); } });
+    expect(await form.trigger('name')).toBe(false);
+    expect(form.errors.name).toEqual({ type: 'validate', message: 'Validation failed' });
+    expect(form.fieldState.name).toMatchObject({ invalid: true, isValidating: false });
+  });
+
+  it('honors every reset option', async () => {
+    const form = new Form({ defaultValues: { name: 'Ada' } });
+    form.register('name');
+    form.setValue('name', 'Grace', { shouldTouch: true });
+    await form.handleSubmit({ onValid: async () => undefined, onInvalid: async () => undefined })();
+    form.setError('name', { type: 'manual' });
+
+    form.reset({ name: 'Lin' }, { keepDefaultValues: true, keepDirty: true, keepTouched: true, keepErrors: true, keepIsSubmitted: true, keepSubmitCount: true });
+    expect(form.values.name).toBe('Lin');
+    expect(form.fieldState.name).toMatchObject({ isDirty: true, isTouched: true, invalid: true });
+    expect(form.isSubmitted).toBe(true);
+    expect(form.submitCount).toBe(1);
+
+    form.reset();
+    expect(form.values.name).toBe('Ada');
+    expect(form.fieldState.name).toMatchObject({ isDirty: false, isTouched: false, invalid: false });
+    expect(form.isSubmitted).toBe(false);
+    expect(form.submitCount).toBe(0);
+
+    form.setValue('name', 'Bea');
+    form.reset({ name: 'Kim' }, { keepDefaultValues: false, keepDirty: false, keepTouched: false, keepErrors: false, keepIsSubmitted: false, keepSubmitCount: false });
+    form.reset();
+    expect(form.values.name).toBe('Kim');
+  });
+
+  it('reports schema root issues and preserves unrelated errors', async () => {
+    const form = new Form({
+      values: { first: 'Ada', second: 'Lin' },
+      schema: {
+        safeParseAsync: async () => ({
+          success: false as const,
+          error: { issues: [{ code: 'custom', path: [], message: 'Form is locked' }, { code: 'custom', path: ['second'], message: 'Second invalid' }] },
+        }),
+      },
+    });
+    form.register('first');
+    form.register('second');
+    form.setError('first', { type: 'old', message: 'Old error' });
+    expect(await form.trigger('second')).toBe(false);
+    expect(form.errors.root).toBeUndefined();
+    expect(form.errors.second?.message).toBe('Second invalid');
+    expect(form.errors.first?.message).toBe('Old error');
+    expect(await form.trigger()).toBe(false);
+    expect(form.errors.root?.message).toBe('Form is locked');
+    expect(form.fieldState.root?.invalid).toBe(true);
+  });
+
+  it('settles concurrent trigger and submit validations', async () => {
+    const pending: Array<(valid: boolean) => void> = [];
+    const form = new Form<{ name: string }>({
+      values: { name: 'Ada' },
+      schema: {
+        safeParseAsync: () => new Promise((resolve) => {
+          pending.push((valid) => resolve(valid
+            ? { success: true, data: { name: 'Ada' } }
+            : { success: false, error: { issues: [{ code: 'custom', path: ['name'], message: 'Invalid' }] } }));
+        }),
+      },
+    });
+    form.register('name');
+    const trigger = form.trigger('name');
+    const submit = form.handleSubmit({ onValid: async () => undefined, onInvalid: async () => undefined })();
+    while (pending.length < 2) await Promise.resolve();
+    pending[0](false);
+    pending[1](true);
+    expect(await trigger).toBe(false);
+    await submit;
+    expect(form.fieldState.name?.isValidating).toBe(false);
+    expect(form.isSubmitting).toBe(false);
+    expect(form.errors.name).toBeUndefined();
+  });
+
+  it('combines schema and rule errors without keeping stale results', async () => {
+    const form = new Form({
+      values: { email: '' },
+      schema: z.object({ email: z.string().min(5, 'Schema error') }),
+    });
+    form.register('email', { required: 'Rule error' });
+    expect(await form.trigger('email')).toBe(false);
+    expect(form.errors.email?.message).toBe('Rule error');
+    form.setValue('email', 'x');
+    expect(await form.trigger('email')).toBe(false);
+    expect(form.errors.email?.message).toBe('Schema error');
+    form.setValue('email', '');
+    expect(await form.trigger('email')).toBe(false);
+    expect(form.errors.email?.message).toBe('Rule error');
+    form.setValue('email', 'valid@example.com');
+    expect(await form.trigger('email')).toBe(true);
+    expect(form.errors.email).toBeUndefined();
+  });
 });

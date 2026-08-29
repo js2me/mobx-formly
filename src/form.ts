@@ -24,6 +24,7 @@ export class Form<T extends FieldValues = FieldValues> {
   private readonly options: Required<Pick<FormOptions<T>, 'mode' | 'reValidateMode' | 'disabled'>> & FormOptions<T>;
   private readonly fieldOptions = new Map<string, RegisterOptions<T>>();
   private readonly listeners = new Set<(values: T, info: { name?: string }) => void>();
+  private readonly validationRuns = new Map<string, number>();
 
   constructor(options?: FormOptions<T>);
   constructor(options: FormOptions<T> = {}) {
@@ -45,6 +46,7 @@ export class Form<T extends FieldValues = FieldValues> {
       isSubmitted: observable,
       isSubmitSuccessful: observable,
       submitCount: observable,
+      disabled: computed,
       fieldState: observable.deep,
       isDirty: computed,
       isValid: computed,
@@ -62,6 +64,7 @@ export class Form<T extends FieldValues = FieldValues> {
     });
   }
 
+  get disabled(): boolean { return this.options.disabled; }
   get isDirty(): boolean { return Object.keys(this.dirtyFields).length > 0; }
   get isValid(): boolean { return Object.keys(this.errors).length === 0; }
 
@@ -78,12 +81,14 @@ export class Form<T extends FieldValues = FieldValues> {
       name: path,
       ref,
       onChange: async (eventOrValue) => {
+        if (this.disabled) return;
         const value = this.transformValue(extractValue(eventOrValue), options);
         const shouldValidate = this.shouldValidateOnChange(path);
         this.setValue(path, value as FieldPathValue<T, typeof path>, { shouldDirty: true, shouldValidate: false });
         if (shouldValidate) await this.trigger(path);
       },
       onBlur: async () => {
+        if (this.disabled) return;
         this.markTouched(path);
         if (this.options.mode === 'onBlur' || this.options.mode === 'all' || (path in this.errors && this.options.reValidateMode === 'onBlur')) await this.trigger(path);
       },
@@ -127,6 +132,9 @@ export class Form<T extends FieldValues = FieldValues> {
 
   async trigger(name?: FieldPath<T> | FieldPath<T>[]): Promise<boolean> {
     const paths = name ? (Array.isArray(name) ? name : [name]).map(String) : undefined;
+    const validationKey = paths?.join('|') ?? '*';
+    const run = (this.validationRuns.get(validationKey) ?? 0) + 1;
+    this.validationRuns.set(validationKey, run);
     for (const path of paths ?? this.fieldOptions.keys()) {
       this.validatingFields[path] = true;
       this.ensureFieldState(path).isValidating = true;
@@ -138,22 +146,27 @@ export class Form<T extends FieldValues = FieldValues> {
         for (const path of validationPaths) {
           const error = schemaErrors[path] ?? this.validateRules(path);
           if (error instanceof Promise) continue;
-          this.applyError(path, error);
+          if (this.validationRuns.get(validationKey) === run) this.applyError(path, error);
         }
       });
       for (const path of validationPaths) {
         const ruleError = await this.validateRules(path);
         runInAction(() => {
-          if (ruleError) this.applyError(path, ruleError);
-          else if (!schemaErrors[path]) this.applyError(path, undefined);
+          if (this.validationRuns.get(validationKey) === run) {
+            if (ruleError) this.applyError(path, ruleError);
+            else if (schemaErrors[path]) this.applyError(path, schemaErrors[path]);
+            else this.applyError(path, undefined);
+          }
         });
       }
       return (paths ?? Object.keys(this.errors)).every((path) => !this.errors[path]);
     } finally {
       runInAction(() => {
-        for (const path of paths ?? this.fieldOptions.keys()) {
-          delete this.validatingFields[path];
-          this.ensureFieldState(path).isValidating = false;
+        if (this.validationRuns.get(validationKey) === run) {
+          for (const path of paths ?? this.fieldOptions.keys()) {
+            delete this.validatingFields[path];
+            this.ensureFieldState(path).isValidating = false;
+          }
         }
       });
     }
@@ -262,7 +275,12 @@ export class Form<T extends FieldValues = FieldValues> {
     if (rules.max && Number(value) > rules.max.value) return { type: 'max', message: rules.max.message };
     if (rules.pattern && !rules.pattern.value.test(String(value ?? ''))) return { type: 'pattern', message: rules.pattern.message };
     if (rules.validate) {
-      const result = await rules.validate(value, this.snapshot());
+      let result: boolean | string;
+      try {
+        result = await rules.validate(value, this.snapshot());
+      } catch {
+        return { type: 'validate', message: 'Validation failed' };
+      }
       if (result !== true) return { type: 'validate', message: typeof result === 'string' ? result : undefined };
     }
     return undefined;

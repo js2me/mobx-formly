@@ -40,7 +40,11 @@ export type SchemaOutput<S> = S extends SafeParseFormSchema<infer T>
 /** Dot-separated path into the form value tree, for example `user.email`. */
 export type FieldPath<T = FieldValues> = {
   [K in Extract<keyof T, string>]: T[K] extends readonly unknown[]
-    ? K
+    ? T[K] extends readonly (infer I)[]
+      ? I extends object
+        ? K | `${K}.${number}` | `${K}.${number}.${FieldPath<I>}`
+        : K | `${K}.${number}`
+      : K
     : T[K] extends object
       ? K | `${K}.${FieldPath<T[K]>}`
       : K
@@ -50,8 +54,13 @@ export type FieldPathValue<T, P extends string> =
   P extends `${infer K}.${infer Rest}`
     ? K extends keyof T
       ? FieldPathValue<T[K], Rest>
+      : T extends readonly (infer I)[]
+        ? FieldPathValue<I, Rest>
       : never
-    : P extends keyof T ? T[P] : never;
+    : P extends keyof T ? T[P]
+      : T extends readonly (infer I)[]
+        ? P extends `${number}` ? I : never
+        : never;
 
 export interface FieldError {
   type: string;
