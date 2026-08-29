@@ -14,6 +14,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:types": "tsc --noEmit -p tsconfig.types.json",
     "docs:dev": "docusite dev",
     "docs:build": "docusite build",
@@ -46,6 +47,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.1",
+    "@vitest/coverage-v8": "^4.1.11",
     "docusite": "^0.2.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
