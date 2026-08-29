@@ -29,6 +29,7 @@
     "zod": "^3.0.0 || ^4.0.0"
   },
   "type": "module",
+  "packageManager": "pnpm@11.24.0",
   "dependencies": {
     "mobx": "^6.16.1",
     "yummies": "^7.20.1",

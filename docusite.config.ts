@@ -3,6 +3,7 @@ import { defineConfig } from 'docusite'
 export default defineConfig({
   title: 'mobx-formly',
   description: 'Observable, framework-agnostic forms for MobX 6 with Zod validation.',
+  base: '/mobx-formly/',
   github: 'https://github.com/js2me/mobx-formly',
   colors: {
     light: '#e46b2e',
