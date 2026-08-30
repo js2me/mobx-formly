@@ -2,92 +2,39 @@
 
 ## Installation
 
-```bash
-pnpm add mobx-formly mobx
-```
-
-`mobx` is a peer dependency. Install Zod only if you want schema validation:
-
-```bash
-pnpm add zod
-```
-
-Valibot is also supported as an optional alternative:
-
-```bash
-pnpm add valibot
-```
+MobX is a required peer dependency. Zod and Valibot are optional peer dependencies;
+install either one when you need schema validation.
 
 ## Create a form
 
-```ts
-import { z } from 'zod'
-import { Form } from 'mobx-formly'
-
-const form = new Form({
-  defaultValues: {
-    email: '',
-    age: 0,
-  },
-  mode: 'onChange',
-  schema: z.object({
-    email: z.string().email('Enter a valid email'),
-    age: z.number().int().min(18, 'Must be at least 18'),
-  }),
-})
-```
-
-`Form` infers the form value type from either a Zod or Valibot schema. This powers autocomplete and validation for field paths:
-
-```ts
-form.register('email')
-form.setValue('email', 'ada@example.com')
-// form.register('unknown') // TypeScript error
-// form.setValue('email', 123) // TypeScript error
-```
+Create a form with initial values, validation mode, and an optional schema. The
+createForm helper can infer the form value type from the supplied schema, including
+valid field paths and value types. Without a schema, provide the form value type
+explicitly when constructing a Form.
 
 ## Register fields
 
-`register()` returns event handlers and a MobX-aware field ref:
+Registering a field provides its name, a ref, and change and blur handlers. The handlers
+work with UI events and update the corresponding value and field state.
 
-```ts
-const email = form.register('email')
-
-await email.onChange({ target: { value: 'ada@example.com' } })
-await email.onBlur()
-
-console.log(form.values.email)
-console.log(form.fieldState.email.error)
-```
-
-Values can also be updated directly:
-
-```ts
-form.setValue('email', 'ada@example.com', {
-  shouldDirty: true,
-  shouldValidate: true,
-})
-```
+Values may also be updated directly. An update can mark a field dirty or touched and can
+request immediate validation.
 
 ## Submit
 
-Validation always runs before `onValid`, regardless of `mode`:
+Submitting validates the form before calling the valid or invalid handler. The valid
+handler receives a plain snapshot of the current values, while the invalid handler
+receives field errors. The invalid handler is optional.
 
-```ts
-const submit = form.handleSubmit({
-  onValid: async (values) => saveUser(values),
-  onInvalid: (errors) => console.log(errors),
-})
+## Reset and direct mutations
 
-await submit()
-```
+Reset restores the current default values. Passing new values replaces the form values
+and, by default, makes them the new defaults. Reset options can preserve selected state,
+including dirty fields, touched fields, errors, submission status, and submit count.
+
+For several related value changes, mutate groups them into one form update and can run
+validation for the changed fields afterward.
 
 ## MobX consumers
 
-Read observable properties from an `autorun`, MobX reaction, or a UI adapter:
-
-```ts
-autorun(() => {
-  renderEmailError(form.fieldState.email?.error?.message)
-})
-```
+Read observable form properties from an autorun, a MobX reaction, or a UI adapter.

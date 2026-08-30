@@ -1,27 +1,24 @@
 # MobX reactivity
 
-The form uses explicit `makeObservable` annotations. There is no React dependency and no hook lifecycle.
+The form is designed for MobX applications and does not depend on React or a hook
+lifecycle.
 
 ## Granular field state
 
-Each registered field gets a stable observable branch:
+Each registered field exposes stable observable state for its error, dirty, touched, and
+validating status.
 
-```ts
-form.fieldState.email.error
-form.fieldState.email.isDirty
-form.fieldState.email.isTouched
-form.fieldState.email.isValidating
-```
-
-An observer that reads `fieldState.email.error` tracks that property, not a newly-created form-state snapshot. Updating `password` therefore does not invalidate the email error branch.
-
-Aggregate values remain available as computed properties:
-
-```ts
-form.isDirty
-form.isValid
-```
+The form also exposes computed dirty and valid flags, together with its disabled state.
 
 ## Plain values for side effects
 
-`handleSubmit` passes a cloned plain object to `onValid`. This makes it safe to hand values to an API client without exposing the observable object directly.
+The submit callback receives a plain snapshot of the current values, separate from the
+observable form data.
+
+## Updating nested values
+
+Nested values can be addressed with dot-separated paths. Updates can independently
+control dirty tracking, touched state, and validation.
+
+When changing several values directly, use `mutate()` to group the changes and validate
+the changed paths together.
