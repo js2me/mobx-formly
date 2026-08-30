@@ -1,4 +1,4 @@
-import { action, computed, makeObservable, observable, runInAction } from 'mobx';
+import { action, computed, makeObservable, observable, observe, runInAction } from 'mobx';
 import { createRef, type Ref } from 'yummies/mobx';
 import type {
   FieldError, FieldErrors, FieldPath, FieldPathValue, FieldState, FieldStateTree, FieldValues, FormOptions, FormSchema, SchemaIssue,
@@ -23,6 +23,11 @@ export class Form<T extends FieldValues = FieldValues> {
   private readonly defaultValues: T;
   private readonly options: Required<Pick<FormOptions<T>, 'mode' | 'reValidateMode' | 'disabled'>> & FormOptions<T>;
   private readonly fieldOptions = new Map<string, RegisterOptions<T>>();
+  private valueObservers?: Array<() => void>;
+  private observerTimer?: ReturnType<typeof setTimeout>;
+  private readonly changedPaths = new Set<string>();
+  private isMutating = false;
+  private observerTreeChanged = false;
   private validationVersion = 0;
 
   constructor(options?: FormOptions<T>);
@@ -53,6 +58,7 @@ export class Form<T extends FieldValues = FieldValues> {
       register: action,
       unregister: action,
       setValue: action,
+      mutate: action,
       setError: action,
       clearErrors: action,
       trigger: action,
@@ -109,9 +115,84 @@ export class Form<T extends FieldValues = FieldValues> {
   setValue<P extends FieldPath<T>>(name: P, value: FieldPathValue<T, P>, config: SetValueConfig = {}): void {
     const path = name as FieldPath<T> & string;
     setAtPath(this.values, path, value);
+    this.applyValueChange(path, config);
+  }
+
+  mutate(mutator: () => void, config: SetValueConfig = {}): void {
+    this.ensureValueObservers();
+    this.changedPaths.clear();
+    this.isMutating = true;
+
+    try {
+      mutator();
+    } finally {
+      this.isMutating = false;
+    }
+
+    this.scheduleObserverCleanup();
+    const paths = [...this.changedPaths];
+    for (const path of paths) this.applyValueChange(path, { ...config, shouldValidate: false });
+    if (paths.length && (config.shouldValidate ?? true)) {
+      void this.trigger(paths as FieldPath<T>[]);
+    }
+    if (this.observerTreeChanged) {
+      this.disposeValueObservers();
+      this.observerTreeChanged = false;
+      this.ensureValueObservers();
+    }
+  }
+
+  private applyValueChange(path: string, config: SetValueConfig): void {
     if (config.shouldDirty ?? true) this.updateDirty(path);
     if (config.shouldTouch) this.markTouched(path);
-    if (config.shouldValidate) void this.trigger(path);
+    if (config.shouldValidate) void this.trigger(path as FieldPath<T>);
+  }
+
+  private ensureValueObservers(): void {
+    if (!this.valueObservers || this.observerTreeChanged) {
+      this.disposeValueObservers();
+      this.valueObservers = [];
+      this.observeValueTree(this.values, '', this.valueObservers);
+      this.observerTreeChanged = false;
+    }
+    this.scheduleObserverCleanup();
+  }
+
+  private scheduleObserverCleanup(): void {
+    if (this.observerTimer) clearTimeout(this.observerTimer);
+    this.observerTimer = setTimeout(() => this.disposeValueObservers(), 10 * 60 * 1000);
+    const timer = this.observerTimer as unknown as { unref?: () => void };
+    timer.unref?.();
+  }
+
+  private disposeValueObservers(): void {
+    for (const dispose of this.valueObservers ?? []) dispose();
+    this.valueObservers = undefined;
+    this.observerTimer = undefined;
+  }
+
+  private observeValueTree(value: unknown, basePath: string, disposers: Array<() => void>): void {
+    if (!value || typeof value !== 'object') return;
+
+    if (Array.isArray(value)) {
+      disposers.push(observe(value, (change) => {
+        if (change.type === 'splice') this.observerTreeChanged = true;
+        if (this.isMutating && basePath) this.changedPaths.add(basePath);
+      }));
+    } else {
+      disposers.push(observe(value as Record<string, unknown>, (change) => {
+        if (change.type === 'update' && (typeof change.newValue === 'object' || typeof change.oldValue === 'object')) {
+          this.observerTreeChanged = true;
+        }
+        if (!this.isMutating) return;
+        const path = basePath ? `${basePath}.${String(change.name)}` : String(change.name);
+        if (path) this.changedPaths.add(path);
+      }));
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+      this.observeValueTree(child, basePath ? `${basePath}.${key}` : key, disposers);
+    }
   }
 
   setError(name: FieldPath<T>, error: FieldError): void {
@@ -188,6 +269,7 @@ export class Form<T extends FieldValues = FieldValues> {
   }
 
   reset(values?: Partial<T>, options: ResetOptions = {}): void {
+    this.disposeValueObservers();
     this.validationVersion += 1;
     for (const path of Object.keys(this.validatingFields)) {
       delete this.validatingFields[path];

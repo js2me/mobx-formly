@@ -316,6 +316,73 @@ describe('Form', () => {
     expect(form.fieldState['items.0.name']?.isDirty).toBe(true);
   });
 
+  it('tracks multiple direct mutations through mutate', async () => {
+    const form = new Form({
+      defaultValues: { items: [{ name: 'One' }], count: 0 },
+      schema: z.object({ items: z.array(z.object({ name: z.string() })), count: z.number().min(1, 'Count is required') }),
+    });
+    form.mutate(() => {
+      form.values.items.push({ name: 'Two' });
+      form.values.count = 1;
+    });
+
+    expect(form.dirtyFields.items).toBe(true);
+    expect(form.dirtyFields.count).toBe(true);
+    await vi.waitFor(() => expect(form.errors.count).toBeUndefined());
+  });
+
+  it('tracks nested mutations and validates changed fields', async () => {
+    const form = new Form({
+      defaultValues: { profile: { name: 'Ada' } },
+      schema: z.object({ profile: z.object({ name: z.string().min(3, 'Name is too short') }) }),
+    });
+    form.register('profile.name');
+
+    form.mutate(() => {
+      form.values.profile.name = 'Al';
+    });
+
+    expect(form.dirtyFields['profile.name']).toBe(true);
+    await vi.waitFor(() => expect(form.errors['profile.name']?.message).toBe('Name is too short'));
+  });
+
+  it('respects mutate metadata options', async () => {
+    const form = new Form({
+      defaultValues: { count: 1 },
+      schema: z.object({ count: z.number().min(3, 'Count is too small') }),
+    });
+
+    form.mutate(() => {
+      form.values.count = 3;
+    }, { shouldDirty: false, shouldValidate: false });
+
+    expect(form.dirtyFields.count).toBeUndefined();
+    expect(form.errors.count).toBeUndefined();
+
+    form.mutate(() => {
+      form.values.count = 2;
+    });
+
+    expect(form.dirtyFields.count).toBe(true);
+    await vi.waitFor(() => expect(form.errors.count?.message).toBe('Count is too small'));
+  });
+
+  it('cleans up cached mutate observers after inactivity', () => {
+    vi.useFakeTimers();
+    try {
+      const form = new Form({ defaultValues: { count: 0 } });
+
+      form.mutate(() => { form.values.count = 1; });
+      expect((form as unknown as { valueObservers?: unknown[] }).valueObservers?.length).toBeGreaterThan(0);
+
+      vi.advanceTimersByTime(10 * 60 * 1000);
+
+      expect((form as unknown as { valueObservers?: unknown[] }).valueObservers).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('runs complex asynchronous schema refinements and maps every issue', async () => {
     const schema = z.object({
       username: z.string(),

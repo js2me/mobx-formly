@@ -36,6 +36,7 @@ new Form({
 | `register(name, options?)` | Returns `name`, `ref`, `onChange`, and `onBlur`. |
 | `unregister(name)` | Removes a field and its state. |
 | `setValue(name, value, config?)` | Updates a value and optionally marks or validates it. |
+| `mutate(mutator, config?)` | Applies direct observable mutations as one form update; detects changed paths and marks/validates them. Observers are cached for 10 minutes after the last call. |
 | `setError(name, error)` | Sets a field error. |
 | `clearErrors(name?)` | Clears one, many, or all errors. |
 | `trigger(name?)` | Runs schema and rule validation. |
