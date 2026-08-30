@@ -29,6 +29,7 @@ export class Form<T extends FieldValues = FieldValues> {
   private isMutating = false;
   private observerTreeChanged = false;
   private activeSubmissions = 0;
+  private resetVersion = 0;
   private validationVersion = 0;
   private readonly fieldValidationVersions = new Map<string, number>();
 
@@ -262,14 +263,19 @@ export class Form<T extends FieldValues = FieldValues> {
       this.isSubmitting = true;
       this.isSubmitted = true;
       this.submitCount += 1;
+      const submissionResetVersion = this.resetVersion;
       try {
         const valid = await this.trigger();
         if (valid) {
           await onValid(this.snapshot, this);
-          runInAction(() => { this.isSubmitSuccessful = true; });
+          runInAction(() => {
+            if (this.resetVersion === submissionResetVersion) this.isSubmitSuccessful = true;
+          });
         } else {
           await onInvalid?.(this.errors, this);
-          runInAction(() => { this.isSubmitSuccessful = false; });
+          runInAction(() => {
+            if (this.resetVersion === submissionResetVersion) this.isSubmitSuccessful = false;
+          });
         }
       } finally {
         runInAction(() => {
@@ -282,6 +288,7 @@ export class Form<T extends FieldValues = FieldValues> {
 
   reset(values?: Partial<T>, options: ResetOptions = {}): void {
     this.disposeValueObservers();
+    this.resetVersion += 1;
     this.validationVersion += 1;
     for (const path of Object.keys(this.validatingFields)) {
       delete this.validatingFields[path];
@@ -307,12 +314,15 @@ export class Form<T extends FieldValues = FieldValues> {
 
   resetField(name: FieldPath<T>): void {
     const path = name as string;
+    this.fieldValidationVersions.set(path, (this.fieldValidationVersions.get(path) ?? 0) + 1);
     setAtPath(this.values, path, clone(getAtPath(this.defaultValues, path)));
     delete this.errors[path]; delete this.dirtyFields[path]; delete this.touchedFields[path];
+    delete this.validatingFields[path];
     const state = this.ensureFieldState(path);
     this.applyFieldState(state, undefined);
     state.isDirty = false;
     state.isTouched = false;
+    state.isValidating = false;
   }
 
   setFocus(name: FieldPath<T>): void { this.refs.get(name as string)?.current?.focus(); }
