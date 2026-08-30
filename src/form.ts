@@ -28,6 +28,7 @@ export class Form<T extends FieldValues = FieldValues> {
   private readonly changedPaths = new Set<string>();
   private isMutating = false;
   private observerTreeChanged = false;
+  private activeSubmissions = 0;
   private validationVersion = 0;
 
   constructor(options?: FormOptions<T>);
@@ -250,6 +251,7 @@ export class Form<T extends FieldValues = FieldValues> {
 
   handleSubmit({ onValid, onInvalid }: SubmitHandlers<T>): () => Promise<void> {
     return async () => {
+      this.activeSubmissions += 1;
       this.isSubmitting = true;
       this.isSubmitted = true;
       this.submitCount += 1;
@@ -263,7 +265,10 @@ export class Form<T extends FieldValues = FieldValues> {
           runInAction(() => { this.isSubmitSuccessful = false; });
         }
       } finally {
-        runInAction(() => { this.isSubmitting = false; });
+        runInAction(() => {
+          this.activeSubmissions -= 1;
+          this.isSubmitting = this.activeSubmissions > 0;
+        });
       }
     };
   }
@@ -297,7 +302,10 @@ export class Form<T extends FieldValues = FieldValues> {
     const path = name as string;
     setAtPath(this.values, path, clone(getAtPath(this.defaultValues, path)));
     delete this.errors[path]; delete this.dirtyFields[path]; delete this.touchedFields[path];
-    this.applyFieldState(this.ensureFieldState(path), undefined);
+    const state = this.ensureFieldState(path);
+    this.applyFieldState(state, undefined);
+    state.isDirty = false;
+    state.isTouched = false;
   }
 
   setFocus(name: FieldPath<T>): void { this.refs.get(name as string)?.current?.focus(); }
