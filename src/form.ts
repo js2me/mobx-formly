@@ -8,16 +8,71 @@ import type {
 import { clone, deleteAtPath, extractValue, getAtPath, isEqual, setAtPath } from './utils.js';
 
 export class Form<T extends FieldValues = FieldValues> {
+  /**
+   * Current form values.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#values)
+   */
   values: T;
+  /**
+   * Errors keyed by field path.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#errors)
+   */
   errors: Record<string, FieldError | undefined> = {};
+  /**
+   * Field paths whose values differ from their defaults.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#dirtyfields)
+   */
   dirtyFields: Record<string, true | undefined> = {};
+  /**
+   * Field paths that have been touched.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#touchedfields)
+   */
   touchedFields: Record<string, true | undefined> = {};
+  /**
+   * Field paths that are currently being validated.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#validatingfields)
+   */
   validatingFields: Record<string, true | undefined> = {};
+  /**
+   * Observable state for each registered field.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#fieldstate)
+   */
   fieldState: Record<string, FieldState | undefined> = {};
+  /**
+   * Whether a submission is currently running.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#issubmitting)
+   */
   isSubmitting = false;
+  /**
+   * Whether the form has been submitted at least once.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#issubmitted)
+   */
   isSubmitted = false;
+  /**
+   * Whether the latest submission succeeded.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#issubmitsuccessful)
+   */
   isSubmitSuccessful = false;
+  /**
+   * Number of submission attempts.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#submitcount)
+   */
   submitCount = 0;
+  /**
+   * Refs registered for fields.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#refs)
+   */
   readonly refs = new Map<string, Ref<HTMLElement | null>>();
 
   private readonly defaultValues: T;
@@ -33,6 +88,10 @@ export class Form<T extends FieldValues = FieldValues> {
   private validationVersion = 0;
   private readonly fieldValidationVersions = new Map<string, number>();
 
+  /** Creates a form with optional initial values, schema, and validation settings.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#constructor-options)
+   */
   constructor(options?: FormOptions<T>);
   constructor(options: FormOptions<T> = {}) {
     this.options = {
@@ -72,10 +131,32 @@ export class Form<T extends FieldValues = FieldValues> {
     });
   }
 
+  /**
+   * Whether registered event handlers ignore changes and blur events.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#disabled)
+   */
   get disabled(): boolean { return this.options.disabled; }
+
+  /**
+   * Whether any field is dirty.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#isdirty)
+   */
   get isDirty(): boolean { return Object.keys(this.dirtyFields).length > 0; }
+
+  /**
+   * Whether the form has no errors.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#isvalid)
+   */
   get isValid(): boolean { return Object.keys(this.errors).length === 0; }
 
+  /**
+   * Registers a field and returns its ref and event handlers.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#registername-options)
+   */
   register(name: FieldPath<T>, options: RegisterOptions<T> = {}): RegisterReturn {
     const path = name as FieldPath<T> & string;
     this.fieldOptions.set(path, options);
@@ -103,6 +184,11 @@ export class Form<T extends FieldValues = FieldValues> {
     };
   }
 
+  /**
+   * Removes a field, its value, and its associated state.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#unregistername)
+   */
   unregister(name: FieldPath<T>): void {
     const path = name as FieldPath<T> & string;
     this.fieldValidationVersions.set(path, (this.fieldValidationVersions.get(path) ?? 0) + 1);
@@ -116,12 +202,22 @@ export class Form<T extends FieldValues = FieldValues> {
     this.refs.delete(path);
   }
 
+  /**
+   * Updates a field value and optionally changes its state or validates it.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#setvaluename-value-config)
+   */
   setValue<P extends FieldPath<T>>(name: P, value: FieldPathValue<T, P>, config: SetValueConfig = {}): void {
     const path = name as FieldPath<T> & string;
     setAtPath(this.values, path, value);
     this.applyValueChange(path, config);
   }
 
+  /**
+   * Groups direct value changes and processes their changed paths together.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#mutatemutator-config)
+   */
   mutate(mutator: () => void, config: SetValueConfig = {}): void {
     this.ensureValueObservers();
     this.changedPaths.clear();
@@ -199,10 +295,20 @@ export class Form<T extends FieldValues = FieldValues> {
     }
   }
 
+  /**
+   * Sets an error for a field.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#seterrorname-error)
+   */
   setError(name: FieldPath<T>, error: FieldError): void {
     this.applyError(name as FieldPath<T> & string, error);
   }
 
+  /**
+   * Clears one, several, or all field errors.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#clearerrorsname)
+   */
   clearErrors(name?: FieldPath<T> | FieldPath<T>[]): void {
     if (!name) {
       this.errors = {};
@@ -212,6 +318,11 @@ export class Form<T extends FieldValues = FieldValues> {
     for (const path of Array.isArray(name) ? name : [name]) this.applyError(path as FieldPath<T> & string, undefined);
   }
 
+  /**
+   * Validates one field, several fields, or the complete form.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#triggername)
+   */
   async trigger(name?: FieldPath<T> | FieldPath<T>[]): Promise<boolean> {
     const paths = name ? (Array.isArray(name) ? name : [name]).map(String) : undefined;
     const run = ++this.validationVersion;
@@ -257,6 +368,11 @@ export class Form<T extends FieldValues = FieldValues> {
     }
   }
 
+  /**
+   * Creates an asynchronous submit handler with validation and result callbacks.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#handlesubmithandlers)
+   */
   handleSubmit({ onValid, onInvalid }: SubmitHandlers<T>): () => Promise<void> {
     return async () => {
       this.activeSubmissions += 1;
@@ -286,6 +402,11 @@ export class Form<T extends FieldValues = FieldValues> {
     };
   }
 
+  /**
+   * Resets values and selected form state.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#resetvalues-options)
+   */
   reset(values?: Partial<T>, options: ResetOptions = {}): void {
     this.disposeValueObservers();
     this.resetVersion += 1;
@@ -312,6 +433,11 @@ export class Form<T extends FieldValues = FieldValues> {
     }
   }
 
+  /**
+   * Resets one field to its current default value and clears its state.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#resetfieldname)
+   */
   resetField(name: FieldPath<T>): void {
     const path = name as string;
     this.fieldValidationVersions.set(path, (this.fieldValidationVersions.get(path) ?? 0) + 1);
@@ -325,8 +451,18 @@ export class Form<T extends FieldValues = FieldValues> {
     state.isValidating = false;
   }
 
+  /**
+   * Focuses a registered field when its ref points to a focusable element.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#setfocusname)
+   */
   setFocus(name: FieldPath<T>): void { this.refs.get(name as string)?.current?.focus(); }
 
+  /**
+   * Returns a plain copy of the current values.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#snapshot)
+   */
   get snapshot(): T { return clone(this.values); }
   private markTouched(path: string): void {
     this.touchedFields[path] = true;
