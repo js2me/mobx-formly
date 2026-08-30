@@ -11,6 +11,7 @@
     "url": "https://github.com/js2me/mobx-formly/issues"
   },
   "main": "./dist/index.js",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
@@ -31,18 +32,27 @@
   },
   "keywords": [
     "mobx",
+    "mobx-form",
+    "form",
     "forms",
+    "form-state",
+    "form-management",
     "form-validation",
+    "validation",
+    "schema-validation",
     "typescript",
     "zod",
-    "valibot",
-    "react-hook-form"
+    "valibot"
   ],
   "author": "js2me",
   "license": "MIT",
+  "sideEffects": false,
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "peerDependencies": {
     "mobx": "^6.12.4 || ^7.0.0",
     "valibot": "^1.0.0",
@@ -55,6 +65,9 @@
     "valibot": {
       "optional": true
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "packageManager": "pnpm@11.24.0",
