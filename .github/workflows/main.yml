@@ -38,3 +38,6 @@ jobs:
 
       - name: Run tests
         run: pnpm test:coverage
+
+      - name: Run performance regression tests
+        run: pnpm test:performance

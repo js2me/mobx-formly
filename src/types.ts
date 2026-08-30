@@ -38,7 +38,7 @@ export type SchemaOutput<S> = S extends SafeParseFormSchema<infer T>
     ? T
     : never;
 /** Dot-separated path into the form value tree, for example `user.email`. */
-export type FieldPath<T = FieldValues> = {
+export type FieldPath<T = FieldValues> = 'root' | {
   [K in Extract<keyof T, string>]: T[K] extends readonly unknown[]
     ? T[K] extends readonly (infer I)[]
       ? I extends object
