@@ -30,6 +30,7 @@ export class Form<T extends FieldValues = FieldValues> {
   private observerTreeChanged = false;
   private activeSubmissions = 0;
   private validationVersion = 0;
+  private readonly fieldValidationVersions = new Map<string, number>();
 
   constructor(options?: FormOptions<T>);
   constructor(options: FormOptions<T> = {}) {
@@ -103,6 +104,7 @@ export class Form<T extends FieldValues = FieldValues> {
 
   unregister(name: FieldPath<T>): void {
     const path = name as FieldPath<T> & string;
+    this.fieldValidationVersions.set(path, (this.fieldValidationVersions.get(path) ?? 0) + 1);
     deleteAtPath(this.values, path);
     delete this.errors[path];
     delete this.dirtyFields[path];
@@ -212,6 +214,10 @@ export class Form<T extends FieldValues = FieldValues> {
   async trigger(name?: FieldPath<T> | FieldPath<T>[]): Promise<boolean> {
     const paths = name ? (Array.isArray(name) ? name : [name]).map(String) : undefined;
     const run = ++this.validationVersion;
+    const fieldVersions = new Map<string, number>();
+    for (const path of paths ?? this.fieldOptions.keys()) {
+      if (this.fieldOptions.has(path)) fieldVersions.set(path, this.fieldValidationVersions.get(path) ?? 0);
+    }
     for (const path of paths ?? this.fieldOptions.keys()) {
       this.validatingFields[path] = true;
       this.ensureFieldState(path).isValidating = true;
@@ -221,7 +227,7 @@ export class Form<T extends FieldValues = FieldValues> {
       const validationPaths = paths ?? [...new Set([...this.fieldOptions.keys(), ...Object.keys(this.errors), ...Object.keys(schemaErrors)])];
       runInAction(() => {
         for (const path of validationPaths) {
-          if (this.validationVersion === run && schemaErrors[path]) {
+          if (schemaErrors[path] && this.isValidationCurrent(path, run, fieldVersions)) {
             this.applyError(path, schemaErrors[path]);
           }
         }
@@ -229,7 +235,7 @@ export class Form<T extends FieldValues = FieldValues> {
       for (const path of validationPaths) {
         const ruleError = await this.validateRules(path);
         runInAction(() => {
-          if (this.validationVersion === run) {
+          if (this.isValidationCurrent(path, run, fieldVersions)) {
             if (ruleError) this.applyError(path, ruleError);
             else if (schemaErrors[path]) this.applyError(path, schemaErrors[path]);
             else this.applyError(path, undefined);
@@ -241,6 +247,7 @@ export class Form<T extends FieldValues = FieldValues> {
       runInAction(() => {
         if (this.validationVersion === run) {
           for (const path of paths ?? this.fieldOptions.keys()) {
+            if (!this.isValidationCurrent(path, run, fieldVersions)) continue;
             delete this.validatingFields[path];
             this.ensureFieldState(path).isValidating = false;
           }
@@ -321,6 +328,12 @@ export class Form<T extends FieldValues = FieldValues> {
     this.ensureFieldState(path).isDirty = !!this.dirtyFields[path];
   }
   private shouldValidateOnChange(path: string): boolean { return this.options.mode === 'onChange' || this.options.mode === 'all' || (path in this.errors && this.options.reValidateMode === 'onChange'); }
+  private isValidationCurrent(path: string, run: number, fieldVersions: Map<string, number>): boolean {
+    if (this.validationVersion !== run) return false;
+    const version = fieldVersions.get(path);
+    return version === undefined
+      || (this.fieldOptions.has(path) && (this.fieldValidationVersions.get(path) ?? 0) === version);
+  }
   private transformValue(value: unknown, options: RegisterOptions<T>): unknown {
     if (options.setValueAs) return options.setValueAs(value);
     if (options.valueAsNumber) return value === '' ? Number.NaN : Number(value);
