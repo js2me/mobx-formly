@@ -11,6 +11,13 @@ export default defineConfig({
   },
   search: 'local',
   llms: true,
+  banners: [
+    {
+      paths: '/',
+      message: 'The API is unstable: there is no SemVer release yet. This project is a work in progress (WIP).',
+      type: 'warning',
+    },
+  ],
   nav: [
     { text: 'Guide', link: '/guide/getting-started' },
     { text: 'API', link: '/api/form' },
