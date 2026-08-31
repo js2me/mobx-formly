@@ -132,6 +132,10 @@ export interface SetValueConfig {
   shouldTouch?: boolean;
 }
 
+export interface SetErrorConfig {
+  shouldFocus?: boolean;
+}
+
 export interface ResetOptions {
   keepDefaultValues?: boolean;
   keepValues?: boolean;

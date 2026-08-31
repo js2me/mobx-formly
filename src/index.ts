@@ -4,5 +4,5 @@ export type { InferredFormValues } from './create-form.js';
 export type {
   FieldError, FieldErrors, FieldPath, FieldPathValue, FieldState, FieldStateTree, FieldValues, FormOptions, FormSchema,
   SafeParseFormSchema, SchemaIssue, SchemaOutput, SchemaResult, ValibotFormSchema, ValibotRunResult,
-  RegisterOptions, RegisterReturn, ResetOptions, SetValueConfig, SubmitHandlers,
+  RegisterOptions, RegisterReturn, ResetOptions, SetErrorConfig, SetValueConfig, SubmitHandlers,
 } from './types.js';

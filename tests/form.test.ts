@@ -144,6 +144,27 @@ describe('Form', () => {
     form.reset(undefined, { keepDefaultValues: true });
   });
 
+  it('focuses a field through setError with shouldFocus', () => {
+    const form = new Form({ defaultValues: { name: '', email: '' } });
+    const name = form.register('name');
+    const email = form.register('email');
+    const nameInput = { focus: vi.fn() } as unknown as HTMLElement;
+    const emailInput = { focus: vi.fn() } as unknown as HTMLElement;
+    name.ref(nameInput);
+    email.ref(emailInput);
+
+    form.setError('name', { type: 'manual', message: 'Nope' }, { shouldFocus: true });
+    expect(form.errors.name).toEqual({ type: 'manual', message: 'Nope' });
+    expect(nameInput.focus).toHaveBeenCalledOnce();
+    expect(emailInput.focus).not.toHaveBeenCalled();
+
+    form.setError('email', { type: 'manual' });
+    expect(emailInput.focus).not.toHaveBeenCalled();
+
+    form.setError('name', { type: 'manual' }, { shouldFocus: false });
+    expect(nameInput.focus).toHaveBeenCalledOnce();
+  });
+
   it('handles safe path utilities and SSR-compatible values', () => {
     const data: Record<string, unknown> = {};
     setAtPath(data, 'profile.name', 'Ada');

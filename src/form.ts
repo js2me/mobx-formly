@@ -3,7 +3,7 @@ import { createRef, type Ref } from 'yummies/mobx';
 import type {
   FieldError, FieldErrors, FieldPath, FieldPathValue, FieldState, FieldStateTree, FieldValues, FormOptions, FormSchema, SchemaIssue,
   SchemaOutput, SchemaResult, ValibotRunResult,
-  RegisterOptions, RegisterReturn, ResetOptions, SetValueConfig, SubmitHandlers,
+  RegisterOptions, RegisterReturn, ResetOptions, SetErrorConfig, SetValueConfig, SubmitHandlers,
 } from './types.js';
 import { clone, deleteAtPath, extractValue, getAtPath, isEqual, setAtPath } from './utils.js';
 
@@ -322,12 +322,14 @@ export class Form<T extends FieldValues = FieldValues> {
   }
 
   /**
-   * Sets an error for a field.
+   * Sets an error for a field and can focus it.
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#seterrorname-error)
    */
-  setError(name: FieldPath<T>, error: FieldError): void {
-    this.applyError(name as FieldPath<T> & string, error);
+  setError(name: FieldPath<T>, error: FieldError, config: SetErrorConfig = {}): void {
+    const path = name as FieldPath<T> & string;
+    this.applyError(path, error);
+    if (config.shouldFocus) this.refs.get(path)?.current?.focus();
   }
 
   /**

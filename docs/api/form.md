@@ -35,7 +35,7 @@ values are used by reset and dirty comparison.
 | `unregister(name)` | Removes a field and its state. |
 | `setValue(name, value, config?)` | Updates a value and optionally marks or validates it. |
 | `mutate(mutator, config?)` | Groups several value changes into one form update and can mark or validate the changed paths. |
-| `setError(name, error)` | Sets a field error. |
+| `setError(name, error, config?)` | Sets a field error. `config.shouldFocus` focuses the field ref. |
 | `clearErrors(name?)` | Clears one, many, or all errors. |
 | `trigger(name?)` | Runs schema and rule validation. |
 | `handleSubmit(handlers)` | Returns an async submit function. Validates before calling `onValid` or `onInvalid`. |
