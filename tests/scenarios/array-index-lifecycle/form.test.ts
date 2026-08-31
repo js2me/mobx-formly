@@ -12,8 +12,8 @@ describe('array index lifecycle scenario', () => {
     form.mutate(() => form.values.items.reverse(), { shouldValidate: false });
 
     expect(form.values.items).toEqual([{ name: 'Two' }, { name: 'Changed' }]);
-    expect(form.fieldState['items.0.name']?.isTouched).toBe(true);
-    expect(form.errors['items.1.name']).toBeDefined();
+    expect(form.fieldState.items?.[0]?.name?.isTouched).toBe(true);
+    expect(form.errors.items?.[1]?.name).toBeDefined();
   });
 
   it('cleans metadata when the registered index is explicitly unregistered', () => {
@@ -24,9 +24,9 @@ describe('array index lifecycle scenario', () => {
 
     form.unregister('items.0.name');
 
-    expect(form.errors['items.0.name']).toBeUndefined();
+    expect(form.errors.items?.[0]?.name).toBeUndefined();
     expect(form.dirtyFields['items.0.name']).toBeUndefined();
     expect(form.touchedFields['items.0.name']).toBeUndefined();
-    expect(form.fieldState['items.0.name']).toBeUndefined();
+    expect(form.fieldState.items?.[0]?.name).toBeUndefined();
   });
 });

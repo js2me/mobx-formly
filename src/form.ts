@@ -15,11 +15,25 @@ export class Form<T extends FieldValues = FieldValues> {
    */
   values: T;
   /**
-   * Errors keyed by field path.
+   * Validation errors nested by field path.
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#errors)
    */
-  errors: Record<string, FieldError | undefined> = {};
+  private readonly errorsByPath = observable.map<string, FieldError>();
+  private readonly errorPathCounts = observable.map<string, number>();
+  private readonly errorChildren = new Map<string, Set<string>>();
+  private readonly errorProxyCache = new Map<string, object>();
+  private readonly fieldStatesByPath = observable.map<string, FieldState>();
+  private readonly fieldStatePathCounts = observable.map<string, number>();
+  private readonly fieldStateChildren = new Map<string, Set<string>>();
+  private readonly fieldStateProxyCache = new Map<string, object>();
+
+  /** Validation errors nested by field path. */
+  get errors(): FieldErrors<T> {
+    return this.createPathProxy<FieldError>(
+      '', this.errorsByPath, this.errorPathCounts, this.errorChildren, this.errorProxyCache,
+    ) as FieldErrors<T>;
+  }
   /**
    * Field paths whose values differ from their defaults.
    *
@@ -43,7 +57,12 @@ export class Form<T extends FieldValues = FieldValues> {
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#fieldstate)
    */
-  fieldState: Record<string, FieldState | undefined> = {};
+  /** Observable state for each registered field, nested by field path. */
+  get fieldState(): FieldStateTree<T> {
+    return this.createPathProxy<FieldState>(
+      '', this.fieldStatesByPath, this.fieldStatePathCounts, this.fieldStateChildren, this.fieldStateProxyCache,
+    ) as FieldStateTree<T>;
+  }
   /**
    * Whether a submission is currently running.
    *
@@ -104,7 +123,6 @@ export class Form<T extends FieldValues = FieldValues> {
     this.values = clone((options.values ?? options.defaultValues ?? {}) as T);
     makeObservable(this, {
       values: observable.deep,
-      errors: observable.shallow,
       dirtyFields: observable.shallow,
       touchedFields: observable.shallow,
       validatingFields: observable.shallow,
@@ -113,7 +131,6 @@ export class Form<T extends FieldValues = FieldValues> {
       isSubmitSuccessful: observable,
       submitCount: observable,
       disabled: computed,
-      fieldState: observable.deep,
       isDirty: computed,
       isValid: computed,
       snapshot: computed,
@@ -150,7 +167,7 @@ export class Form<T extends FieldValues = FieldValues> {
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#isvalid)
    */
-  get isValid(): boolean { return Object.keys(this.errors).length === 0; }
+  get isValid(): boolean { return this.errorsByPath.size === 0; }
 
   /**
    * Registers a field and returns its ref and event handlers.
@@ -179,7 +196,7 @@ export class Form<T extends FieldValues = FieldValues> {
       onBlur: async () => {
         if (this.disabled) return;
         this.markTouched(path);
-        if (this.options.mode === 'onBlur' || this.options.mode === 'all' || (path in this.errors && this.options.reValidateMode === 'onBlur')) await this.trigger(path);
+        if (this.options.mode === 'onBlur' || this.options.mode === 'all' || (this.hasError(path) && this.options.reValidateMode === 'onBlur')) await this.trigger(path);
       },
     };
   }
@@ -193,11 +210,11 @@ export class Form<T extends FieldValues = FieldValues> {
     const path = name as FieldPath<T> & string;
     this.fieldValidationVersions.set(path, (this.fieldValidationVersions.get(path) ?? 0) + 1);
     deleteAtPath(this.values, path);
-    delete this.errors[path];
+    this.applyError(path, undefined);
     delete this.dirtyFields[path];
     delete this.touchedFields[path];
     delete this.validatingFields[path];
-    delete this.fieldState[path];
+    this.deleteFieldState(path);
     this.fieldOptions.delete(path);
     this.refs.delete(path);
   }
@@ -311,8 +328,8 @@ export class Form<T extends FieldValues = FieldValues> {
    */
   clearErrors(name?: FieldPath<T> | FieldPath<T>[]): void {
     if (!name) {
-      this.errors = {};
-      for (const state of Object.values(this.fieldState)) if (state) this.applyFieldState(state, undefined);
+      this.clearPathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren);
+      for (const [, state] of this.fieldStates()) this.applyFieldState(state, undefined);
       return;
     }
     for (const path of Array.isArray(name) ? name : [name]) this.applyError(path as FieldPath<T> & string, undefined);
@@ -336,11 +353,12 @@ export class Form<T extends FieldValues = FieldValues> {
     }
     try {
       const schemaErrors = await this.validateSchema();
-      const validationPaths = paths ?? [...new Set([...this.fieldOptions.keys(), ...Object.keys(this.errors), ...Object.keys(schemaErrors)])];
+      const validationPaths = paths ?? [...new Set([...this.fieldOptions.keys(), ...this.errorsByPath.keys(), ...this.errorPaths(schemaErrors)])];
       runInAction(() => {
         for (const path of validationPaths) {
-          if (schemaErrors[path] && this.isValidationCurrent(path, run, fieldVersions)) {
-            this.applyError(path, schemaErrors[path]);
+          const schemaError = this.getError(schemaErrors, path);
+          if (schemaError && this.isValidationCurrent(path, run, fieldVersions)) {
+            this.applyError(path, schemaError);
           }
         }
       });
@@ -349,12 +367,12 @@ export class Form<T extends FieldValues = FieldValues> {
         runInAction(() => {
           if (this.isValidationCurrent(path, run, fieldVersions)) {
             if (ruleError) this.applyError(path, ruleError);
-            else if (schemaErrors[path]) this.applyError(path, schemaErrors[path]);
+            else if (this.getError(schemaErrors, path)) this.applyError(path, this.getError(schemaErrors, path));
             else this.applyError(path, undefined);
           }
         });
       }
-      return (paths ?? Object.keys(this.errors)).every((path) => !this.errors[path]);
+      return (paths ?? [...this.errorsByPath.keys()]).every((path) => !this.hasError(path));
     } finally {
       runInAction(() => {
         if (this.validationVersion === run) {
@@ -413,7 +431,7 @@ export class Form<T extends FieldValues = FieldValues> {
     this.validationVersion += 1;
     for (const path of Object.keys(this.validatingFields)) {
       delete this.validatingFields[path];
-      const state = this.fieldState[path];
+      const state = this.fieldStatesByPath.get(path);
       if (state) state.isValidating = false;
     }
     const next = clone((values ?? this.defaultValues) as T);
@@ -422,12 +440,12 @@ export class Form<T extends FieldValues = FieldValues> {
     if (!options.keepDirty) this.dirtyFields = {};
     if (!options.keepTouched) this.touchedFields = {};
     if (!options.keepErrors) {
-      this.errors = {};
-      for (const state of Object.values(this.fieldState)) if (state) this.applyFieldState(state, undefined);
+      this.clearPathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren);
+      for (const [, state] of this.fieldStates()) this.applyFieldState(state, undefined);
     }
     if (!options.keepIsSubmitted) { this.isSubmitted = false; this.isSubmitSuccessful = false; }
     if (!options.keepSubmitCount) this.submitCount = 0;
-    for (const [path, state] of Object.entries(this.fieldState)) if (state) {
+    for (const [path, state] of this.fieldStates()) {
       state.isDirty = !!this.dirtyFields[path];
       state.isTouched = !!this.touchedFields[path];
     }
@@ -442,7 +460,7 @@ export class Form<T extends FieldValues = FieldValues> {
     const path = name as string;
     this.fieldValidationVersions.set(path, (this.fieldValidationVersions.get(path) ?? 0) + 1);
     setAtPath(this.values, path, clone(getAtPath(this.defaultValues, path)));
-    delete this.errors[path]; delete this.dirtyFields[path]; delete this.touchedFields[path];
+    this.applyError(path, undefined); delete this.dirtyFields[path]; delete this.touchedFields[path];
     delete this.validatingFields[path];
     const state = this.ensureFieldState(path);
     this.applyFieldState(state, undefined);
@@ -473,7 +491,7 @@ export class Form<T extends FieldValues = FieldValues> {
     else this.dirtyFields[path] = true;
     this.ensureFieldState(path).isDirty = !!this.dirtyFields[path];
   }
-  private shouldValidateOnChange(path: string): boolean { return this.options.mode === 'onChange' || this.options.mode === 'all' || (path in this.errors && this.options.reValidateMode === 'onChange'); }
+  private shouldValidateOnChange(path: string): boolean { return this.options.mode === 'onChange' || this.options.mode === 'all' || (this.hasError(path) && this.options.reValidateMode === 'onChange'); }
   private isValidationCurrent(path: string, run: number, fieldVersions: Map<string, number>): boolean {
     if (this.validationVersion !== run) return false;
     const version = fieldVersions.get(path);
@@ -501,7 +519,7 @@ export class Form<T extends FieldValues = FieldValues> {
   private normalizeSchemaErrors(error: { issues: SchemaIssue[] }): FieldErrors<T> {
     return error.issues.reduce<FieldErrors<T>>((errors, issue) => {
       const path = (issue.path ?? []).map((part) => String(typeof part === 'object' ? part.key : part)).join('.') || 'root';
-      if (!errors[path]) errors[path] = { type: issue.code ?? issue.type ?? 'validation', message: issue.message };
+      if (!this.getError(errors, path)) setAtPath(errors as Record<string, unknown>, path, { type: issue.code ?? issue.type ?? 'validation', message: issue.message });
       return errors;
     }, {});
   }
@@ -528,15 +546,115 @@ export class Form<T extends FieldValues = FieldValues> {
     return undefined;
   }
   private ensureFieldState(path: string): FieldState {
-    return (this.fieldState[path] ??= { invalid: false, isDirty: false, isTouched: false, isValidating: false });
+    const existing = this.fieldStatesByPath.get(path);
+    if (existing) return existing;
+    const state = { invalid: false, isDirty: false, isTouched: false, isValidating: false };
+    this.setPathStore(this.fieldStatesByPath, this.fieldStatePathCounts, this.fieldStateChildren, path, state);
+    return state;
   }
   private applyFieldState(state: FieldState, error: FieldError | undefined): void {
     state.error = error;
     state.invalid = !!error;
   }
   private applyError(path: string, error: FieldError | undefined): void {
-    if (error) this.errors[path] = error;
-    else delete this.errors[path];
+    if (error) this.setPathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren, path, error);
+    else this.deletePathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren, path);
     this.applyFieldState(this.ensureFieldState(path), error);
+  }
+
+  private getError(errors: FieldErrors<T>, path: string): FieldError | undefined {
+    const value = getAtPath(errors, path);
+    return value && typeof value === 'object' && 'type' in value ? value as FieldError : undefined;
+  }
+
+  private hasError(path: string): boolean { return this.errorsByPath.has(path); }
+
+  private errorPaths(errors: FieldErrors<T>, base = ''): string[] {
+    const paths: string[] = [];
+    for (const [key, value] of Object.entries(errors)) {
+      if (value === undefined) continue;
+      const path = base ? `${base}.${key}` : key;
+      if (value && typeof value === 'object' && 'type' in value) paths.push(path);
+      if (value && typeof value === 'object') paths.push(...this.errorPaths(value as FieldErrors<T>, path));
+    }
+    return paths;
+  }
+
+  private deleteFieldState(path: string): void {
+    this.deletePathStore(this.fieldStatesByPath, this.fieldStatePathCounts, this.fieldStateChildren, path);
+  }
+
+  private fieldStates(): Array<[string, FieldState]> {
+    return [...this.fieldStatesByPath.entries()];
+  }
+
+  private setPathStore<V>(store: Map<string, V>, counts: Map<string, number>, children: Map<string, Set<string>>, path: string, value: V): void {
+    if (!store.has(path)) this.addPathToIndex(counts, children, path);
+    store.set(path, value);
+  }
+
+  private deletePathStore<V>(store: Map<string, V>, counts: Map<string, number>, children: Map<string, Set<string>>, path: string): void {
+    if (!store.delete(path)) return;
+    const parts = path.split('.');
+    for (let index = parts.length; index > 0; index -= 1) {
+      const current = parts.slice(0, index).join('.');
+      const count = (counts.get(current) ?? 1) - 1;
+      if (count > 0) {
+        counts.set(current, count);
+        continue;
+      }
+      counts.delete(current);
+      const parent = parts.slice(0, index - 1).join('.');
+      const siblings = children.get(parent);
+      siblings?.delete(parts[index - 1]);
+      if (siblings?.size === 0) children.delete(parent);
+    }
+  }
+
+  private clearPathStore<V>(store: Map<string, V>, counts: Map<string, number>, children: Map<string, Set<string>>): void {
+    store.clear();
+    counts.clear();
+    children.clear();
+  }
+
+  private addPathToIndex(counts: Map<string, number>, children: Map<string, Set<string>>, path: string): void {
+    const parts = path.split('.');
+    for (let index = 1; index <= parts.length; index += 1) {
+      const current = parts.slice(0, index).join('.');
+      counts.set(current, (counts.get(current) ?? 0) + 1);
+      const parent = parts.slice(0, index - 1).join('.');
+      let siblings = children.get(parent);
+      if (!siblings) children.set(parent, siblings = new Set());
+      siblings.add(parts[index - 1]);
+    }
+  }
+
+  private createPathProxy<V extends object>(
+    path: string, store: Map<string, V>, counts: Map<string, number>, children: Map<string, Set<string>>, cache: Map<string, object>,
+  ): object {
+    const cached = cache.get(path);
+    if (cached) return cached;
+    const proxy = new Proxy({}, {
+      get: (_, property) => {
+        if (typeof property !== 'string') return undefined;
+        const current = store.get(path);
+        if (current && property in current) return current[property as keyof V];
+        const childPath = path ? `${path}.${property}` : property;
+        const value = store.get(childPath);
+        if (value && !children.has(childPath)) return value;
+        return counts.has(childPath) ? this.createPathProxy(childPath, store, counts, children, cache) : undefined;
+      },
+      ownKeys: () => [...Object.keys(store.get(path) ?? {}), ...(children.get(path) ?? [])],
+      getOwnPropertyDescriptor: (_, property) => {
+        if (typeof property !== 'string') return undefined;
+        const value = store.get(path);
+        if (value && property in value) return { configurable: true, enumerable: true, value: value[property as keyof V] };
+        return children.get(path)?.has(property) ? { configurable: true, enumerable: true } : undefined;
+      },
+      set: () => false,
+      deleteProperty: () => false,
+    });
+    cache.set(path, proxy);
+    return proxy;
   }
 }

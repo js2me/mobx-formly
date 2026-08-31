@@ -12,6 +12,6 @@ describe('nested error cleanup scenario', () => {
 
     expect(form.errors).toEqual({});
     expect(form.fieldState.root?.invalid).toBe(false);
-    expect(form.fieldState['profile.email']?.invalid).toBe(false);
+    expect(form.fieldState.profile?.email?.invalid).toBe(false);
   });
 });

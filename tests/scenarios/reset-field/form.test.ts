@@ -9,12 +9,14 @@ describe('reset field scenario', () => {
     form.setValue('profile.name', 'Grace', { shouldTouch: true });
     form.setValue('profile.city', 'Paris');
     form.setError('profile.name', { type: 'server', message: 'Invalid name' });
+    const fieldState = form.fieldState;
 
     form.resetField('profile.name');
 
     expect(form.values.profile).toEqual({ name: 'Ada', city: 'Paris' });
-    expect(form.errors['profile.name']).toBeUndefined();
-    expect(form.fieldState['profile.name']).toMatchObject({ isDirty: false, isTouched: false, invalid: false });
-    expect(form.fieldState['profile.city']?.isDirty).toBe(true);
+    expect(form.errors.profile?.name).toBeUndefined();
+    expect(form.fieldState.profile?.name).toMatchObject({ isDirty: false, isTouched: false, invalid: false });
+    expect(form.fieldState.profile?.city?.isDirty).toBe(true);
+    expect(form.fieldState).toBe(fieldState);
   });
 });

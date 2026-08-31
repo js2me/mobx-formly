@@ -53,3 +53,12 @@ test('infers array field paths and values', () => {
   // @ts-expect-error Array item values are checked by path.
   form.setValue('items.0.count', '1');
 });
+
+test('exposes nested errors through the value tree', () => {
+  const form = new Form<{ remotes: Array<{ name: string }> }>({
+    defaultValues: { remotes: [{ name: '' }] },
+  });
+
+  expectTypeOf(form.errors.remotes?.[0]?.name).toEqualTypeOf<import('../src/index.js').FieldError | undefined>();
+  expectTypeOf(form.fieldState.remotes?.[0]?.name?.isValidating).toEqualTypeOf<boolean | undefined>();
+});

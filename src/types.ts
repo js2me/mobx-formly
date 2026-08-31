@@ -67,7 +67,13 @@ export interface FieldError {
   message?: string;
 }
 
-export type FieldErrors<T extends FieldValues = FieldValues> = Record<string, FieldError | undefined>;
+export type FieldErrors<T extends object = FieldValues> = {
+  [K in keyof T]?: T[K] extends readonly (infer I)[]
+    ? FieldError & Array<I extends object ? FieldErrors<I> : FieldError | undefined>
+    : T[K] extends object
+      ? FieldError & FieldErrors<T[K]>
+      : FieldError;
+} & { root?: FieldError };
 
 export interface FieldState {
   invalid: boolean;
@@ -77,7 +83,13 @@ export interface FieldState {
   error?: FieldError;
 }
 
-export type FieldStateTree<T extends FieldValues = FieldValues> = Record<string, FieldState | undefined>;
+export type FieldStateTree<T extends object = FieldValues> = {
+  [K in keyof T]?: T[K] extends readonly (infer I)[]
+    ? FieldState & Array<I extends object ? FieldStateTree<I> : FieldState | undefined>
+    : T[K] extends object
+      ? FieldState & FieldStateTree<T[K]>
+      : FieldState;
+} & { root?: FieldState };
 
 export interface FormState<T extends FieldValues = FieldValues> {
   errors: FieldErrors<T>;

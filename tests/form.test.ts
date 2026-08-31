@@ -16,7 +16,7 @@ describe('Form', () => {
     await Promise.resolve();
 
     expect(form.values).toEqual({ user: { name: 'Ada' } });
-    expect(form.fieldState['user.name']).toMatchObject({ isDirty: true });
+    expect(form.fieldState.user?.name).toMatchObject({ isDirty: true });
     expect(observed).toEqual([false, true]);
     dispose();
   });
@@ -313,7 +313,7 @@ describe('Form', () => {
 
     expect(Array.isArray(form.values.items)).toBe(true);
     expect(form.values.items).toEqual([{ name: 'Updated', quantity: 1 }, { name: 'Two', quantity: 5 }]);
-    expect(form.fieldState['items.0.name']?.isDirty).toBe(true);
+    expect(form.fieldState.items?.[0]?.name?.isDirty).toBe(true);
   });
 
   it('tracks multiple direct mutations through mutate', async () => {
@@ -343,7 +343,7 @@ describe('Form', () => {
     });
 
     expect(form.dirtyFields['profile.name']).toBe(true);
-    await vi.waitFor(() => expect(form.errors['profile.name']?.message).toBe('Name is too short'));
+    await vi.waitFor(() => expect(form.errors.profile?.name?.message).toBe('Name is too short'));
   });
 
   it('respects mutate metadata options', async () => {

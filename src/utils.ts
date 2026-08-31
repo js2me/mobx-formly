@@ -39,7 +39,8 @@ export const deleteAtPath = (target: Record<string, unknown>, path: string): voi
     if (isUnsafeProperty(key) || !value || typeof value !== 'object') return undefined;
     return (value as Record<string, unknown>)[key];
   }, target);
-  if (parent && typeof parent === 'object') delete (parent as Record<string, unknown>)[lastKey];
+  if (!parent || typeof parent !== 'object') return;
+  delete (parent as Record<string, unknown>)[lastKey];
 };
 
 export const isEqual = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);

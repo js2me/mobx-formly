@@ -18,7 +18,7 @@ describe('array mutation scenario', () => {
     });
 
     expect(form.dirtyFields['items.1.name']).toBe(true);
-    await vi.waitFor(() => expect(form.errors['items.1.name']?.message).toBe('Name is too short'));
+    await vi.waitFor(() => expect(form.errors.items?.[1]?.name?.message).toBe('Name is too short'));
   });
 
   it('clears errors after removing and revalidating an array item', async () => {
@@ -30,13 +30,13 @@ describe('array mutation scenario', () => {
     form.register('items.1.name');
 
     expect(await form.trigger()).toBe(false);
-    expect(form.errors['items.0.name']).toBeDefined();
+    expect(form.errors.items?.[0]?.name).toBeDefined();
 
     form.mutate(() => {
       form.values.items.reverse();
     }, { shouldValidate: false });
     expect(await form.trigger()).toBe(false);
-    expect(form.errors['items.1.name']).toBeDefined();
+    expect(form.errors.items?.[1]?.name).toBeDefined();
 
     form.mutate(() => {
       form.values.items.splice(1, 1);

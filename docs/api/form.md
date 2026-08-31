@@ -12,8 +12,8 @@ values are used by reset and dirty comparison.
 | Property | Description |
 | --- | --- |
 | `values` | Current form values. Supports dot-path updates through `setValue`. |
-| `errors` | Errors keyed by field path. |
-| `fieldState` | Stable per-field state: `error`, `invalid`, `isDirty`, `isTouched`, `isValidating`. |
+| `errors` | Validation errors nested by field path. |
+| `fieldState` | Stable per-field state nested by field path: `error`, `invalid`, `isDirty`, `isTouched`, `isValidating`. |
 | `validatingFields` | Field paths currently being validated. |
 | `dirtyFields` | Dirty field paths. |
 | `touchedFields` | Touched field paths. |
