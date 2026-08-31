@@ -221,18 +221,136 @@ describe('Form', () => {
     expect(form.values.name).toBe('Lin');
     expect(form.fieldState.name).toMatchObject({ isDirty: true, isTouched: true, invalid: true });
     expect(form.isSubmitted).toBe(true);
+    expect(form.isSubmitSuccessful).toBe(false);
     expect(form.submitCount).toBe(1);
+
+    form.clearErrors();
+    await form.handleSubmit({ onValid: async () => undefined, onInvalid: async () => undefined })();
+    expect(form.isSubmitSuccessful).toBe(true);
+    form.reset({ name: 'Lin' }, { keepIsSubmitSuccessful: true, keepDefaultValues: true });
+    expect(form.isSubmitted).toBe(false);
+    expect(form.isSubmitSuccessful).toBe(true);
 
     form.reset();
     expect(form.values.name).toBe('Ada');
     expect(form.fieldState.name).toMatchObject({ isDirty: false, isTouched: false, invalid: false });
     expect(form.isSubmitted).toBe(false);
+    expect(form.isSubmitSuccessful).toBe(false);
     expect(form.submitCount).toBe(0);
 
     form.setValue('name', 'Bea');
     form.reset({ name: 'Kim' }, { keepDefaultValues: false, keepDirty: false, keepTouched: false, keepErrors: false, keepIsSubmitted: false, keepSubmitCount: false });
     form.reset();
     expect(form.values.name).toBe('Kim');
+  });
+
+  it('exposes reactive default values', async () => {
+    const form = new Form({ defaultValues: { name: 'Ada' } });
+    const observed: Array<unknown> = [];
+    const dispose = autorun(() => observed.push(form.defaultValues.name));
+
+    expect(form.defaultValues).toEqual({ name: 'Ada' });
+    form.setValue('name', 'Grace');
+    expect(form.defaultValues.name).toBe('Ada');
+
+    form.reset({ name: 'Lin' });
+    expect(form.defaultValues).toEqual({ name: 'Lin' });
+    form.resetField('name');
+    expect(form.values.name).toBe('Lin');
+
+    form.reset({ name: 'Kim' }, { keepDefaultValues: true });
+    expect(form.defaultValues.name).toBe('Lin');
+    expect(observed).toEqual(['Ada', 'Lin']);
+    dispose();
+  });
+
+  it('honors keepValues, keepDirtyValues, and keepIsValid reset options', async () => {
+    const form = new Form({
+      defaultValues: { name: 'Ada', email: '', nested: { city: 'London' } },
+    });
+    form.register('name');
+    form.register('email');
+    form.register('nested.city');
+
+    form.setValue('name', 'Grace');
+    form.setError('email', { type: 'manual', message: 'Bad email' });
+    expect(form.isValid).toBe(false);
+    form.reset({ name: 'Lin', email: '', nested: { city: 'London' } }, { keepIsValid: true });
+    expect(form.errors).toEqual({});
+    expect(form.isValid).toBe(false);
+    await form.trigger('email');
+    expect(form.isValid).toBe(true);
+
+    form.setValue('name', 'Grace');
+    form.setError('email', { type: 'manual', message: 'Bad email' });
+    form.reset({ name: 'Lin', email: '', nested: { city: 'London' } }, { keepValues: true });
+    expect(form.values).toEqual({ name: 'Grace', email: '', nested: { city: 'London' } });
+    expect(form.defaultValues).toEqual({ name: 'Lin', email: '', nested: { city: 'London' } });
+
+    form.reset({ name: 'Kim', email: '', nested: { city: 'Oslo' } });
+    form.setValue('name', 'Grace');
+    form.setValue('nested.city', 'Paris');
+    form.reset(
+      { name: 'Kim', email: 'kim@example.test', nested: { city: 'Oslo' } },
+      { keepDirtyValues: true },
+    );
+    expect(form.values.name).toBe('Grace');
+    expect(form.values.nested.city).toBe('Paris');
+    expect(form.values.email).toBe('kim@example.test');
+    expect(form.dirtyFields).toEqual({ name: true, 'nested.city': true });
+    expect(form.isDirty).toBe(true);
+    expect(form.fieldState.name?.isDirty).toBe(true);
+
+    form.reset({ name: 'Kim', email: 'kim@example.test', nested: { city: 'Oslo' } });
+    expect(form.values).toEqual({ name: 'Kim', email: 'kim@example.test', nested: { city: 'Oslo' } });
+    expect(form.dirtyFields).toEqual({});
+  });
+
+  it('keeps validating state through reset with keepIsValidating', async () => {
+    const pending: Array<(valid: boolean) => void> = [];
+    const form = new Form<{ name: string }>({
+      defaultValues: { name: '' },
+      schema: {
+        safeParseAsync: () => new Promise((resolve) => {
+          pending.push((valid) => resolve(valid
+            ? { success: true as const, data: { name: '' } }
+            : { success: false as const, error: { issues: [{ code: 'custom', path: ['name'], message: 'Bad' }] } }));
+        }),
+      },
+    });
+    form.register('name');
+
+    const first = form.trigger('name');
+    while (pending.length < 1) await Promise.resolve();
+    expect(form.validatingFields.name).toBe(true);
+    expect(form.fieldState.name?.isValidating).toBe(true);
+
+    form.reset({ name: 'Ada' }, { keepIsValidating: true });
+    expect(form.validatingFields.name).toBe(true);
+    expect(form.fieldState.name?.isValidating).toBe(true);
+
+    pending[0](false);
+    await first;
+    expect(form.errors).toEqual({});
+    expect(form.validatingFields.name).toBe(true);
+    expect(form.fieldState.name?.isValidating).toBe(true);
+
+    const second = form.trigger('name');
+    while (pending.length < 2) await Promise.resolve();
+    pending[1](true);
+    expect(await second).toBe(true);
+    expect(form.validatingFields.name).toBeUndefined();
+    expect(form.fieldState.name?.isValidating).toBe(false);
+
+    const third = form.trigger('name');
+    while (pending.length < 3) await Promise.resolve();
+    form.reset({ name: 'Ada' }, { keepIsValidating: true });
+    expect(form.validatingFields.name).toBe(true);
+    form.reset({ name: 'Ada' });
+    expect(form.validatingFields.name).toBeUndefined();
+    expect(form.fieldState.name?.isValidating).toBe(false);
+    pending[2](true);
+    await third;
   });
 
   it('reports schema root issues and preserves unrelated errors', async () => {

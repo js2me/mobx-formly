@@ -134,10 +134,15 @@ export interface SetValueConfig {
 
 export interface ResetOptions {
   keepDefaultValues?: boolean;
+  keepValues?: boolean;
   keepDirty?: boolean;
+  keepDirtyValues?: boolean;
   keepTouched?: boolean;
   keepErrors?: boolean;
+  keepIsValid?: boolean;
+  keepIsValidating?: boolean;
   keepIsSubmitted?: boolean;
+  keepIsSubmitSuccessful?: boolean;
   keepSubmitCount?: boolean;
 }
 

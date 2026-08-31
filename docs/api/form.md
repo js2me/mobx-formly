@@ -12,6 +12,7 @@ values are used by reset and dirty comparison.
 | Property | Description |
 | --- | --- |
 | `values` | Current form values. Supports dot-path updates through `setValue`. |
+| `defaultValues` | Cached default values used by `reset`, `resetField`, and dirty comparison. Updated by `reset` unless `keepDefaultValues` is set. |
 | `errors` | Validation errors nested by field path. |
 | `fieldState` | Stable per-field state nested by field path: `error`, `invalid`, `isDirty`, `isTouched`, `isValidating`. |
 | `validatingFields` | Field paths currently being validated. |
@@ -66,6 +67,13 @@ enabled by default for `setValue`; touching and validation are opt-in.
 
 ## `reset(values?, options?)`
 
-Reset options are `keepDefaultValues`, `keepDirty`, `keepTouched`, `keepErrors`,
-`keepIsSubmitted`, and `keepSubmitCount`. `resetField(name)` resets one field to its
-current default value and clears its field state.
+Reset options are `keepDefaultValues`, `keepValues`, `keepDirty`, `keepDirtyValues`,
+`keepTouched`, `keepErrors`, `keepIsValid`, `keepIsValidating`, `keepIsSubmitted`,
+`keepIsSubmitSuccessful`, and `keepSubmitCount`. `keepValues` leaves the current values
+in place, `keepDirtyValues` keeps dirty values and their dirty flags while only clean
+fields take the new values, `keepIsValid` persists the current `isValid` until the next
+error or validation update, and `keepIsValidating` keeps the `validatingFields` and
+`fieldState.isValidating` flags until the next validation update. In-flight validation
+is still discarded by reset.
+`resetField(name)` resets one field to its current default value and clears its
+field state.

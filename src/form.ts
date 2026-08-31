@@ -15,6 +15,13 @@ export class Form<T extends FieldValues = FieldValues> {
    */
   values: T;
   /**
+   * Cached default values used by reset, resetField, and dirty comparison.
+   * Updated by reset unless `keepDefaultValues` is passed.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#defaultvalues)
+   */
+  defaultValues: T;
+  /**
    * Validation errors nested by field path.
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#errors)
@@ -94,7 +101,6 @@ export class Form<T extends FieldValues = FieldValues> {
    */
   readonly refs = new Map<string, Ref<HTMLElement | null>>();
 
-  private readonly defaultValues: T;
   private readonly options: Required<Pick<FormOptions<T>, 'mode' | 'reValidateMode' | 'disabled'>> & FormOptions<T>;
   private readonly fieldOptions = new Map<string, RegisterOptions<T>>();
   private valueObservers?: Array<() => void>;
@@ -104,6 +110,7 @@ export class Form<T extends FieldValues = FieldValues> {
   private observerTreeChanged = false;
   private activeSubmissions = 0;
   private resetVersion = 0;
+  private readonly isValidOverride = observable.box<boolean | undefined>(undefined);
   private validationVersion = 0;
   private readonly fieldValidationVersions = new Map<string, number>();
 
@@ -123,6 +130,7 @@ export class Form<T extends FieldValues = FieldValues> {
     this.values = clone((options.values ?? options.defaultValues ?? {}) as T);
     makeObservable(this, {
       values: observable.deep,
+      defaultValues: observable.deep,
       dirtyFields: observable.shallow,
       touchedFields: observable.shallow,
       validatingFields: observable.shallow,
@@ -163,11 +171,12 @@ export class Form<T extends FieldValues = FieldValues> {
   get isDirty(): boolean { return Object.keys(this.dirtyFields).length > 0; }
 
   /**
-   * Whether the form has no errors.
+   * Whether the form has no errors. Frozen by `reset` with `keepIsValid`
+   * until the next error or validation update.
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#isvalid)
    */
-  get isValid(): boolean { return this.errorsByPath.size === 0; }
+  get isValid(): boolean { return this.isValidOverride.get() ?? this.errorsByPath.size === 0; }
 
   /**
    * Registers a field and returns its ref and event handlers.
@@ -328,6 +337,7 @@ export class Form<T extends FieldValues = FieldValues> {
    */
   clearErrors(name?: FieldPath<T> | FieldPath<T>[]): void {
     if (!name) {
+      this.isValidOverride.set(undefined);
       this.clearPathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren);
       for (const [, state] of this.fieldStates()) this.applyFieldState(state, undefined);
       return;
@@ -429,21 +439,34 @@ export class Form<T extends FieldValues = FieldValues> {
     this.disposeValueObservers();
     this.resetVersion += 1;
     this.validationVersion += 1;
-    for (const path of Object.keys(this.validatingFields)) {
-      delete this.validatingFields[path];
-      const state = this.fieldStatesByPath.get(path);
-      if (state) state.isValidating = false;
+    if (!options.keepIsValidating) {
+      for (const path of Object.keys(this.validatingFields)) {
+        delete this.validatingFields[path];
+        const state = this.fieldStatesByPath.get(path);
+        if (state) state.isValidating = false;
+      }
     }
-    const next = clone((values ?? this.defaultValues) as T);
-    this.values = next;
+    if (!options.keepValues) {
+      const next = clone((values ?? this.defaultValues) as T);
+      if (options.keepDirtyValues) {
+        for (const path of Object.keys(this.dirtyFields)) {
+          const value = getAtPath(this.values, path);
+          if (value !== undefined) setAtPath(next, path, clone(value));
+        }
+      }
+      this.values = next;
+    }
     if (!options.keepDefaultValues && values) Object.assign(this.defaultValues, clone(values));
-    if (!options.keepDirty) this.dirtyFields = {};
+    if (!options.keepDirty && !options.keepDirtyValues) this.dirtyFields = {};
     if (!options.keepTouched) this.touchedFields = {};
+    const wasValid = this.isValid;
     if (!options.keepErrors) {
       this.clearPathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren);
       for (const [, state] of this.fieldStates()) this.applyFieldState(state, undefined);
     }
-    if (!options.keepIsSubmitted) { this.isSubmitted = false; this.isSubmitSuccessful = false; }
+    this.isValidOverride.set(options.keepIsValid ? wasValid : undefined);
+    if (!options.keepIsSubmitted) this.isSubmitted = false;
+    if (!options.keepIsSubmitSuccessful) this.isSubmitSuccessful = false;
     if (!options.keepSubmitCount) this.submitCount = 0;
     for (const [path, state] of this.fieldStates()) {
       state.isDirty = !!this.dirtyFields[path];
@@ -557,6 +580,7 @@ export class Form<T extends FieldValues = FieldValues> {
     state.invalid = !!error;
   }
   private applyError(path: string, error: FieldError | undefined): void {
+    this.isValidOverride.set(undefined);
     if (error) this.setPathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren, path, error);
     else this.deletePathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren, path);
     this.applyFieldState(this.ensureFieldState(path), error);
