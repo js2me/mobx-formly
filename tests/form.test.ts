@@ -21,6 +21,24 @@ describe('Form', () => {
     dispose();
   });
 
+  it('tracks touched fields reactively', async () => {
+    const form = new Form({ defaultValues: { name: '' }, mode: 'onChange' });
+    const observed: boolean[] = [];
+    const dispose = autorun(() => observed.push(form.isTouched));
+
+    const register = form.register('name');
+    expect(form.isTouched).toBe(false);
+    await register.onBlur();
+    expect(form.isTouched).toBe(true);
+    expect(form.fieldState.name).toMatchObject({ isTouched: true });
+
+    form.setValue('name', 'Ada', { shouldTouch: true });
+    await form.reset();
+    expect(form.isTouched).toBe(false);
+    expect(observed).toEqual([false, true, false]);
+    dispose();
+  });
+
   it('validates Zod schemas and submit handlers', async () => {
     const onValid = vi.fn();
     const onInvalid = vi.fn();

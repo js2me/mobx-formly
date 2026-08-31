@@ -140,6 +140,7 @@ export class Form<T extends FieldValues = FieldValues> {
       submitCount: observable,
       disabled: computed,
       isDirty: computed,
+      isTouched: computed,
       isValid: computed,
       snapshot: computed,
       register: action,
@@ -169,6 +170,13 @@ export class Form<T extends FieldValues = FieldValues> {
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#isdirty)
    */
   get isDirty(): boolean { return Object.keys(this.dirtyFields).length > 0; }
+
+  /**
+   * Whether any field has been touched.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#istouched)
+   */
+  get isTouched(): boolean { return Object.keys(this.touchedFields).length > 0; }
 
   /**
    * Whether the form has no errors. Frozen by `reset` with `keepIsValid`

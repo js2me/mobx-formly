@@ -97,6 +97,7 @@ export interface FormState<T extends FieldValues = FieldValues> {
   touchedFields: Partial<Record<FieldPath<T>, true>>;
   validatingFields: Partial<Record<FieldPath<T>, true>>;
   isDirty: boolean;
+  isTouched: boolean;
   isValid: boolean;
   isValidating: boolean;
   isSubmitting: boolean;

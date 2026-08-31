@@ -19,6 +19,7 @@ values are used by reset and dirty comparison.
 | `dirtyFields` | Dirty field paths. |
 | `touchedFields` | Touched field paths. |
 | `isDirty` | Computed aggregate dirty flag. |
+| `isTouched` | Computed aggregate touched flag. |
 | `isValid` | Computed aggregate validity flag. |
 | `isSubmitting` | Whether a submit handler is running. |
 | `isSubmitted` | Whether submit has been attempted. |
