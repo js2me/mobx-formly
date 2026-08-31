@@ -1,5 +1,11 @@
 # mobx-formly
 
+## 0.0.2
+
+### Patch Changes
+
+- c21f4f3: rework fieldState errors (no flatten paths)
+
 ## 0.0.1
 
 ### Patch Changes
