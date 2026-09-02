@@ -8,6 +8,23 @@ export interface SchemaIssue {
   message: string;
 }
 
+export interface StandardSchemaIssue {
+  message: string;
+  path?: readonly (PropertyKey | { readonly key: PropertyKey } | { readonly toString: () => string })[];
+}
+
+export type StandardSchemaResult<T> =
+  | { value: T; issues?: undefined }
+  | { value?: never; issues: readonly StandardSchemaIssue[] };
+
+export interface StandardFormSchema<T> {
+  readonly '~standard': {
+    readonly version: 1;
+    readonly vendor: string;
+    readonly validate: (value: unknown) => StandardSchemaResult<T> | Promise<StandardSchemaResult<T>>;
+  };
+}
+
 export type SchemaResult<T> =
   | { success: true; data: T }
   | { success: false; error: { issues: SchemaIssue[] } };
@@ -30,10 +47,12 @@ export interface ValibotRunResult<T> {
 }
 
 /** Schema contract accepted by Form. Both Zod and Valibot schemas fit this interface. */
-export type FormSchema<T> = SafeParseFormSchema<T> | ValibotFormSchema<T>;
+export type FormSchema<T> = SafeParseFormSchema<T> | ValibotFormSchema<T> | StandardFormSchema<T>;
 
 export type SchemaOutput<S> = S extends SafeParseFormSchema<infer T>
   ? T
+  : S extends StandardFormSchema<infer T>
+    ? T
   : S extends { readonly '~types'?: { readonly output: infer T } }
     ? T
     : never;
@@ -65,6 +84,7 @@ export type FieldPathValue<T, P extends string> =
 export interface FieldError {
   type: string;
   message?: string;
+  types?: Record<string, string | true>;
 }
 
 export type FieldErrors<T extends object = FieldValues> = {
@@ -155,10 +175,32 @@ export interface FormOptions<T extends FieldValues> {
   defaultValues?: Partial<T>;
   values?: Partial<T>;
   schema?: FormSchema<T>;
-  mode?: 'onSubmit' | 'onChange' | 'onBlur' | 'all';
+  resolver?: Resolver<T>;
+  context?: unknown;
+  mode?: 'onSubmit' | 'onChange' | 'onBlur' | 'onTouched' | 'all';
   reValidateMode?: 'onChange' | 'onBlur';
+  criteriaMode?: 'firstError' | 'all';
+  delayError?: number;
+  shouldUseNativeValidation?: boolean;
   disabled?: boolean;
 }
+
+export interface ResolverOptions<T extends FieldValues> {
+  criteriaMode?: 'firstError' | 'all';
+  fields: Record<string, RegisterOptions<T>>;
+  names?: FieldPath<T>[];
+  shouldUseNativeValidation?: boolean;
+}
+
+export type ResolverResult<T extends FieldValues, TTransformedValues = T> =
+  | { values: TTransformedValues; errors: Record<string, never> }
+  | { values: Record<string, never>; errors: FieldErrors<T> };
+
+export type Resolver<T extends FieldValues = FieldValues, TTransformedValues = T> = (
+  values: T,
+  context: unknown,
+  options: ResolverOptions<T>,
+) => ResolverResult<T, TTransformedValues> | Promise<ResolverResult<T, TTransformedValues>>;
 
 export interface SubmitHandlers<T extends FieldValues> {
   onValid: (values: T, form: unknown) => void | Promise<void>;

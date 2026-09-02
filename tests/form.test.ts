@@ -530,11 +530,11 @@ describe('Form', () => {
       const form = new Form({ defaultValues: { count: 0 } });
 
       form.mutate(() => { form.values.count = 1; });
-      expect((form as unknown as { valueObservers?: unknown[] }).valueObservers?.length).toBeGreaterThan(0);
+      expect((form as unknown as { tracker: { observers?: unknown[] } }).tracker.observers?.length).toBeGreaterThan(0);
 
       vi.advanceTimersByTime(10 * 60 * 1000);
 
-      expect((form as unknown as { valueObservers?: unknown[] }).valueObservers).toBeUndefined();
+      expect((form as unknown as { tracker: { observers?: unknown[] } }).tracker.observers).toBeUndefined();
     } finally {
       vi.useRealTimers();
     }

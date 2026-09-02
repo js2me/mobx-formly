@@ -1,11 +1,15 @@
+import { toJS } from 'mobx';
 import { isUnsafeProperty } from 'yummies/data';
+import type { FieldError, FieldErrors } from './types.js';
 
 export const clone = <T>(value: T): T => {
   if (typeof structuredClone === 'function') {
     try {
-      return structuredClone(value);
+      // toJS strips MobX proxies so structuredClone can run; it keeps
+      // Dates, Maps, and Sets intact instead of stringifying them.
+      return structuredClone(toJS(value)) as T;
     } catch {
-      // MobX observable proxies cannot be structured-cloned directly.
+      // Values may still contain non-cloneable data such as functions or DOM nodes.
     }
   }
   return JSON.parse(JSON.stringify(value)) as T;
@@ -44,6 +48,24 @@ export const deleteAtPath = (target: Record<string, unknown>, path: string): voi
 };
 
 export const isEqual = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/** Returns the field error stored at the path in a nested errors object. */
+export const findErrorAtPath = (errors: FieldErrors, path: string): FieldError | undefined => {
+  const value = getAtPath(errors, path);
+  return value && typeof value === 'object' && 'type' in value ? value as FieldError : undefined;
+};
+
+/** Collects the flat paths of all field errors in a nested errors object. */
+export const collectErrorPaths = (errors: FieldErrors, base = ''): string[] => {
+  const paths: string[] = [];
+  for (const [key, value] of Object.entries(errors)) {
+    if (value === undefined) continue;
+    const path = base ? `${base}.${key}` : key;
+    if (value && typeof value === 'object' && 'type' in value) paths.push(path);
+    if (value && typeof value === 'object') paths.push(...collectErrorPaths(value as unknown as FieldErrors, path));
+  }
+  return paths;
+};
 
 export const extractValue = (eventOrValue: unknown): unknown => {
   if (!eventOrValue || typeof eventOrValue !== 'object' || !('target' in eventOrValue)) return eventOrValue;

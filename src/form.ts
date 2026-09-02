@@ -1,11 +1,14 @@
-import { action, computed, makeObservable, observable, observe, runInAction } from 'mobx';
+import { action, computed, makeObservable, observable, runInAction } from 'mobx';
 import { createRef, type Ref } from 'yummies/mobx';
 import type {
-  FieldError, FieldErrors, FieldPath, FieldPathValue, FieldState, FieldStateTree, FieldValues, FormOptions, FormSchema, SchemaIssue,
-  SchemaOutput, SchemaResult, ValibotRunResult,
+  FieldError, FieldErrors, FieldPath, FieldPathValue, FieldState, FieldStateTree, FieldValues, FormOptions,
   RegisterOptions, RegisterReturn, ResetOptions, SetErrorConfig, SetValueConfig, SubmitHandlers,
 } from './types.js';
 import { clone, deleteAtPath, extractValue, getAtPath, isEqual, setAtPath } from './utils.js';
+import { collectErrorPaths, findErrorAtPath } from './utils.js';
+import { PathStore } from './path-store.js';
+import { MutationTracker } from './mutation-tracker.js';
+import { FormValidator } from './validation.js';
 
 export class Form<T extends FieldValues = FieldValues> {
   /**
@@ -21,25 +24,13 @@ export class Form<T extends FieldValues = FieldValues> {
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#defaultvalues)
    */
   defaultValues: T;
-  /**
-   * Validation errors nested by field path.
-   *
-   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#errors)
-   */
-  private readonly errorsByPath = observable.map<string, FieldError>();
-  private readonly errorPathCounts = observable.map<string, number>();
-  private readonly errorChildren = new Map<string, Set<string>>();
-  private readonly errorProxyCache = new Map<string, object>();
-  private readonly fieldStatesByPath = observable.map<string, FieldState>();
-  private readonly fieldStatePathCounts = observable.map<string, number>();
-  private readonly fieldStateChildren = new Map<string, Set<string>>();
-  private readonly fieldStateProxyCache = new Map<string, object>();
+
+  private readonly errorStore = new PathStore<FieldError>();
+  private readonly fieldStateStore = new PathStore<FieldState>();
 
   /** Validation errors nested by field path. */
   get errors(): FieldErrors<T> {
-    return this.createPathProxy<FieldError>(
-      '', this.errorsByPath, this.errorPathCounts, this.errorChildren, this.errorProxyCache,
-    ) as FieldErrors<T>;
+    return this.errorStore.proxy() as FieldErrors<T>;
   }
   /**
    * Field paths whose values differ from their defaults.
@@ -60,15 +51,12 @@ export class Form<T extends FieldValues = FieldValues> {
    */
   validatingFields: Record<string, true | undefined> = {};
   /**
-   * Observable state for each registered field.
+   * Observable state for each registered field, nested by field path.
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#fieldstate)
    */
-  /** Observable state for each registered field, nested by field path. */
   get fieldState(): FieldStateTree<T> {
-    return this.createPathProxy<FieldState>(
-      '', this.fieldStatesByPath, this.fieldStatePathCounts, this.fieldStateChildren, this.fieldStateProxyCache,
-    ) as FieldStateTree<T>;
+    return this.fieldStateStore.proxy() as FieldStateTree<T>;
   }
   /**
    * Whether a submission is currently running.
@@ -103,11 +91,9 @@ export class Form<T extends FieldValues = FieldValues> {
 
   private readonly options: Required<Pick<FormOptions<T>, 'mode' | 'reValidateMode' | 'disabled'>> & FormOptions<T>;
   private readonly fieldOptions = new Map<string, RegisterOptions<T>>();
-  private valueObservers?: Array<() => void>;
-  private observerTimer?: ReturnType<typeof setTimeout>;
-  private readonly changedPaths = new Set<string>();
-  private isMutating = false;
-  private observerTreeChanged = false;
+  private readonly touchedValidationFields = new Set<string>();
+  private readonly tracker: MutationTracker<T>;
+  private readonly validator: FormValidator<T>;
   private activeSubmissions = 0;
   private resetVersion = 0;
   private readonly isValidOverride = observable.box<boolean | undefined>(undefined);
@@ -128,6 +114,15 @@ export class Form<T extends FieldValues = FieldValues> {
     };
     this.defaultValues = clone((options.defaultValues ?? {}) as T);
     this.values = clone((options.values ?? options.defaultValues ?? {}) as T);
+    this.tracker = new MutationTracker<T>(() => this.values);
+    this.validator = new FormValidator<T>({
+      options: this.options,
+      fieldOptions: this.fieldOptions,
+      refs: this.refs,
+      valueAt: (path) => getAtPath(this.values, path),
+      snapshot: () => this.snapshot,
+      applyError: (path, error) => this.applyError(path, error),
+    });
     makeObservable(this, {
       values: observable.deep,
       defaultValues: observable.deep,
@@ -184,7 +179,7 @@ export class Form<T extends FieldValues = FieldValues> {
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#isvalid)
    */
-  get isValid(): boolean { return this.isValidOverride.get() ?? this.errorsByPath.size === 0; }
+  get isValid(): boolean { return this.isValidOverride.get() ?? this.errorStore.size === 0; }
 
   /**
    * Registers a field and returns its ref and event handlers.
@@ -213,7 +208,11 @@ export class Form<T extends FieldValues = FieldValues> {
       onBlur: async () => {
         if (this.disabled) return;
         this.markTouched(path);
-        if (this.options.mode === 'onBlur' || this.options.mode === 'all' || (this.hasError(path) && this.options.reValidateMode === 'onBlur')) await this.trigger(path);
+        if (this.options.mode === 'onTouched') this.touchedValidationFields.add(path);
+        if (this.options.mode === 'onBlur' || this.options.mode === 'onTouched' || this.options.mode === 'all' || (this.hasError(path) && this.options.reValidateMode === 'onBlur')) {
+          this.validator.flushDelayed(path);
+          await this.trigger(path);
+        }
       },
     };
   }
@@ -226,12 +225,14 @@ export class Form<T extends FieldValues = FieldValues> {
   unregister(name: FieldPath<T>): void {
     const path = name as FieldPath<T> & string;
     this.fieldValidationVersions.set(path, (this.fieldValidationVersions.get(path) ?? 0) + 1);
+    this.validator.cancelDelayed(path);
+    this.touchedValidationFields.delete(path);
     deleteAtPath(this.values, path);
     this.applyError(path, undefined);
     delete this.dirtyFields[path];
     delete this.touchedFields[path];
     delete this.validatingFields[path];
-    this.deleteFieldState(path);
+    this.fieldStateStore.delete(path);
     this.fieldOptions.delete(path);
     this.refs.delete(path);
   }
@@ -253,26 +254,10 @@ export class Form<T extends FieldValues = FieldValues> {
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#mutatemutator-config)
    */
   mutate(mutator: () => void, config: SetValueConfig = {}): void {
-    this.ensureValueObservers();
-    this.changedPaths.clear();
-    this.isMutating = true;
-
-    try {
-      mutator();
-    } finally {
-      this.isMutating = false;
-    }
-
-    this.scheduleObserverCleanup();
-    const paths = [...this.changedPaths];
+    const paths = this.tracker.track(mutator);
     for (const path of paths) this.applyValueChange(path, { ...config, shouldValidate: false });
     if (paths.length && (config.shouldValidate ?? true)) {
       void this.trigger(paths as FieldPath<T>[]);
-    }
-    if (this.observerTreeChanged) {
-      this.disposeValueObservers();
-      this.observerTreeChanged = false;
-      this.ensureValueObservers();
     }
   }
 
@@ -282,53 +267,6 @@ export class Form<T extends FieldValues = FieldValues> {
     if (config.shouldValidate) void this.trigger(path as FieldPath<T>);
   }
 
-  private ensureValueObservers(): void {
-    if (!this.valueObservers || this.observerTreeChanged) {
-      this.disposeValueObservers();
-      this.valueObservers = [];
-      this.observeValueTree(this.values, '', this.valueObservers);
-      this.observerTreeChanged = false;
-    }
-    this.scheduleObserverCleanup();
-  }
-
-  private scheduleObserverCleanup(): void {
-    if (this.observerTimer) clearTimeout(this.observerTimer);
-    this.observerTimer = setTimeout(() => this.disposeValueObservers(), 10 * 60 * 1000);
-    const timer = this.observerTimer as unknown as { unref?: () => void };
-    timer.unref?.();
-  }
-
-  private disposeValueObservers(): void {
-    for (const dispose of this.valueObservers ?? []) dispose();
-    this.valueObservers = undefined;
-    this.observerTimer = undefined;
-  }
-
-  private observeValueTree(value: unknown, basePath: string, disposers: Array<() => void>): void {
-    if (!value || typeof value !== 'object') return;
-
-    if (Array.isArray(value)) {
-      disposers.push(observe(value, (change) => {
-        if (change.type === 'splice') this.observerTreeChanged = true;
-        if (this.isMutating && basePath) this.changedPaths.add(basePath);
-      }));
-    } else {
-      disposers.push(observe(value as Record<string, unknown>, (change) => {
-        if (change.type === 'update' && (typeof change.newValue === 'object' || typeof change.oldValue === 'object')) {
-          this.observerTreeChanged = true;
-        }
-        if (!this.isMutating) return;
-        const path = basePath ? `${basePath}.${String(change.name)}` : String(change.name);
-        if (path) this.changedPaths.add(path);
-      }));
-    }
-
-    for (const [key, child] of Object.entries(value)) {
-      this.observeValueTree(child, basePath ? `${basePath}.${key}` : key, disposers);
-    }
-  }
-
   /**
    * Sets an error for a field and can focus it.
    *
@@ -336,6 +274,7 @@ export class Form<T extends FieldValues = FieldValues> {
    */
   setError(name: FieldPath<T>, error: FieldError, config: SetErrorConfig = {}): void {
     const path = name as FieldPath<T> & string;
+    this.validator.cancelDelayed(path);
     this.applyError(path, error);
     if (config.shouldFocus) this.refs.get(path)?.current?.focus();
   }
@@ -347,12 +286,16 @@ export class Form<T extends FieldValues = FieldValues> {
    */
   clearErrors(name?: FieldPath<T> | FieldPath<T>[]): void {
     if (!name) {
+      this.validator.cancelAllDelayed();
       this.isValidOverride.set(undefined);
-      this.clearPathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren);
-      for (const [, state] of this.fieldStates()) this.applyFieldState(state, undefined);
+      this.errorStore.clear();
+      for (const [, state] of this.fieldStateStore.entries()) this.applyFieldState(state, undefined);
       return;
     }
-    for (const path of Array.isArray(name) ? name : [name]) this.applyError(path as FieldPath<T> & string, undefined);
+    for (const path of Array.isArray(name) ? name : [name]) {
+      this.validator.cancelDelayed(path as string);
+      this.applyError(path as FieldPath<T> & string, undefined);
+    }
   }
 
   /**
@@ -361,6 +304,10 @@ export class Form<T extends FieldValues = FieldValues> {
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#triggername)
    */
   async trigger(name?: FieldPath<T> | FieldPath<T>[]): Promise<boolean> {
+    return (await this.runValidation(name)).valid;
+  }
+
+  private async runValidation(name?: FieldPath<T> | FieldPath<T>[]): Promise<{ valid: boolean; values?: T }> {
     const paths = name ? (Array.isArray(name) ? name : [name]).map(String) : undefined;
     const run = ++this.validationVersion;
     const fieldVersions = new Map<string, number>();
@@ -371,28 +318,23 @@ export class Form<T extends FieldValues = FieldValues> {
       this.validatingFields[path] = true;
       this.ensureFieldState(path).isValidating = true;
     }
+    let valid = true;
     try {
-      const schemaErrors = await this.validateSchema();
-      const validationPaths = paths ?? [...new Set([...this.fieldOptions.keys(), ...this.errorsByPath.keys(), ...this.errorPaths(schemaErrors)])];
-      runInAction(() => {
-        for (const path of validationPaths) {
-          const schemaError = this.getError(schemaErrors, path);
-          if (schemaError && this.isValidationCurrent(path, run, fieldVersions)) {
-            this.applyError(path, schemaError);
-          }
-        }
-      });
+      const schemaResult = await this.validator.resolveSchemaErrors(paths);
+      const schemaErrors = schemaResult.errors;
+      const validationPaths = paths ?? [...new Set([...this.fieldOptions.keys(), ...this.errorStore.paths(), ...collectErrorPaths(schemaErrors)])];
       for (const path of validationPaths) {
-        const ruleError = await this.validateRules(path);
+        const ruleError = await this.validator.validateRules(path);
         runInAction(() => {
           if (this.isValidationCurrent(path, run, fieldVersions)) {
-            if (ruleError) this.applyError(path, ruleError);
-            else if (this.getError(schemaErrors, path)) this.applyError(path, this.getError(schemaErrors, path));
-            else this.applyError(path, undefined);
+            const schemaError = findErrorAtPath(schemaErrors, path);
+            const error = this.validator.mergeErrors(schemaError, ruleError);
+            if (error) valid = false;
+            this.validator.applyValidationError(path, error);
           }
         });
       }
-      return (paths ?? [...this.errorsByPath.keys()]).every((path) => !this.hasError(path));
+      return { valid, values: valid ? schemaResult.values : undefined };
     } finally {
       runInAction(() => {
         if (this.validationVersion === run) {
@@ -419,9 +361,9 @@ export class Form<T extends FieldValues = FieldValues> {
       this.submitCount += 1;
       const submissionResetVersion = this.resetVersion;
       try {
-        const valid = await this.trigger();
+        const { valid, values } = await this.runValidation();
         if (valid) {
-          await onValid(this.snapshot, this);
+          await onValid(values ?? this.snapshot, this);
           runInAction(() => {
             if (this.resetVersion === submissionResetVersion) this.isSubmitSuccessful = true;
           });
@@ -446,13 +388,15 @@ export class Form<T extends FieldValues = FieldValues> {
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#resetvalues-options)
    */
   reset(values?: Partial<T>, options: ResetOptions = {}): void {
-    this.disposeValueObservers();
+    this.validator.cancelAllDelayed();
+    this.touchedValidationFields.clear();
+    this.tracker.dispose();
     this.resetVersion += 1;
     this.validationVersion += 1;
     if (!options.keepIsValidating) {
       for (const path of Object.keys(this.validatingFields)) {
         delete this.validatingFields[path];
-        const state = this.fieldStatesByPath.get(path);
+        const state = this.fieldStateStore.get(path);
         if (state) state.isValidating = false;
       }
     }
@@ -471,14 +415,14 @@ export class Form<T extends FieldValues = FieldValues> {
     if (!options.keepTouched) this.touchedFields = {};
     const wasValid = this.isValid;
     if (!options.keepErrors) {
-      this.clearPathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren);
-      for (const [, state] of this.fieldStates()) this.applyFieldState(state, undefined);
+      this.errorStore.clear();
+      for (const [, state] of this.fieldStateStore.entries()) this.applyFieldState(state, undefined);
     }
     this.isValidOverride.set(options.keepIsValid ? wasValid : undefined);
     if (!options.keepIsSubmitted) this.isSubmitted = false;
     if (!options.keepIsSubmitSuccessful) this.isSubmitSuccessful = false;
     if (!options.keepSubmitCount) this.submitCount = 0;
-    for (const [path, state] of this.fieldStates()) {
+    for (const [path, state] of this.fieldStateStore.entries()) {
       state.isDirty = !!this.dirtyFields[path];
       state.isTouched = !!this.touchedFields[path];
     }
@@ -491,6 +435,8 @@ export class Form<T extends FieldValues = FieldValues> {
    */
   resetField(name: FieldPath<T>): void {
     const path = name as string;
+    this.validator.cancelDelayed(path);
+    this.touchedValidationFields.delete(path);
     this.fieldValidationVersions.set(path, (this.fieldValidationVersions.get(path) ?? 0) + 1);
     setAtPath(this.values, path, clone(getAtPath(this.defaultValues, path)));
     this.applyError(path, undefined); delete this.dirtyFields[path]; delete this.touchedFields[path];
@@ -524,7 +470,12 @@ export class Form<T extends FieldValues = FieldValues> {
     else this.dirtyFields[path] = true;
     this.ensureFieldState(path).isDirty = !!this.dirtyFields[path];
   }
-  private shouldValidateOnChange(path: string): boolean { return this.options.mode === 'onChange' || this.options.mode === 'all' || (this.hasError(path) && this.options.reValidateMode === 'onChange'); }
+  private shouldValidateOnChange(path: string): boolean {
+    return this.options.mode === 'onChange'
+      || this.options.mode === 'all'
+      || (this.options.mode === 'onTouched' && this.touchedValidationFields.has(path))
+      || (this.hasError(path) && this.options.reValidateMode === 'onChange');
+  }
   private isValidationCurrent(path: string, run: number, fieldVersions: Map<string, number>): boolean {
     if (this.validationVersion !== run) return false;
     const version = fieldVersions.get(path);
@@ -537,53 +488,8 @@ export class Form<T extends FieldValues = FieldValues> {
     if (options.valueAsDate) return new Date(String(value));
     return value;
   }
-  private async validateSchema(): Promise<FieldErrors<T>> {
-    if (!this.options.schema) return {};
-    const schema = this.options.schema;
-    if ('safeParseAsync' in schema) {
-      const result = await schema.safeParseAsync(this.snapshot) as SchemaResult<T>;
-      if (result.success) return {};
-      return this.normalizeSchemaErrors(result.error);
-    }
-    const result = await schema['~run']({ value: this.snapshot, typed: false }, {}) as ValibotRunResult<T>;
-    if (!result.issues?.length) return {};
-    return this.normalizeSchemaErrors({ issues: result.issues });
-  }
-  private normalizeSchemaErrors(error: { issues: SchemaIssue[] }): FieldErrors<T> {
-    return error.issues.reduce<FieldErrors<T>>((errors, issue) => {
-      const path = (issue.path ?? []).map((part) => String(typeof part === 'object' ? part.key : part)).join('.') || 'root';
-      if (!this.getError(errors, path)) setAtPath(errors as Record<string, unknown>, path, { type: issue.code ?? issue.type ?? 'validation', message: issue.message });
-      return errors;
-    }, {});
-  }
-  private async validateRules(path: string): Promise<FieldError | undefined> {
-    const rules = this.fieldOptions.get(path);
-    if (!rules) return undefined;
-    const value = getAtPath(this.values, path);
-    const fail = (type: string, rule: string | boolean | undefined) => typeof rule === 'string' ? { type, message: rule } : { type };
-    if (rules.required && (value === undefined || value === null || value === '')) return fail('required', rules.required);
-    if (rules.minLength && String(value ?? '').length < rules.minLength.value) return { type: 'minLength', message: rules.minLength.message };
-    if (rules.maxLength && String(value ?? '').length > rules.maxLength.value) return { type: 'maxLength', message: rules.maxLength.message };
-    if (rules.min && Number(value) < rules.min.value) return { type: 'min', message: rules.min.message };
-    if (rules.max && Number(value) > rules.max.value) return { type: 'max', message: rules.max.message };
-    if (rules.pattern && !rules.pattern.value.test(String(value ?? ''))) return { type: 'pattern', message: rules.pattern.message };
-    if (rules.validate) {
-      let result: boolean | string;
-      try {
-        result = await rules.validate(value, this.snapshot);
-      } catch {
-        return { type: 'validate', message: 'Validation failed' };
-      }
-      if (result !== true) return { type: 'validate', message: typeof result === 'string' ? result : undefined };
-    }
-    return undefined;
-  }
   private ensureFieldState(path: string): FieldState {
-    const existing = this.fieldStatesByPath.get(path);
-    if (existing) return existing;
-    const state = { invalid: false, isDirty: false, isTouched: false, isValidating: false };
-    this.setPathStore(this.fieldStatesByPath, this.fieldStatePathCounts, this.fieldStateChildren, path, state);
-    return state;
+    return this.fieldStateStore.ensure(path, () => ({ invalid: false, isDirty: false, isTouched: false, isValidating: false, error: undefined }));
   }
   private applyFieldState(state: FieldState, error: FieldError | undefined): void {
     state.error = error;
@@ -591,104 +497,12 @@ export class Form<T extends FieldValues = FieldValues> {
   }
   private applyError(path: string, error: FieldError | undefined): void {
     this.isValidOverride.set(undefined);
-    if (error) this.setPathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren, path, error);
-    else this.deletePathStore(this.errorsByPath, this.errorPathCounts, this.errorChildren, path);
-    this.applyFieldState(this.ensureFieldState(path), error);
+    if (error) this.errorStore.set(path, error);
+    else this.errorStore.delete(path);
+    const state = this.ensureFieldState(path);
+    state.error = error;
+    state.invalid = !!error;
   }
 
-  private getError(errors: FieldErrors<T>, path: string): FieldError | undefined {
-    const value = getAtPath(errors, path);
-    return value && typeof value === 'object' && 'type' in value ? value as FieldError : undefined;
-  }
-
-  private hasError(path: string): boolean { return this.errorsByPath.has(path); }
-
-  private errorPaths(errors: FieldErrors<T>, base = ''): string[] {
-    const paths: string[] = [];
-    for (const [key, value] of Object.entries(errors)) {
-      if (value === undefined) continue;
-      const path = base ? `${base}.${key}` : key;
-      if (value && typeof value === 'object' && 'type' in value) paths.push(path);
-      if (value && typeof value === 'object') paths.push(...this.errorPaths(value as FieldErrors<T>, path));
-    }
-    return paths;
-  }
-
-  private deleteFieldState(path: string): void {
-    this.deletePathStore(this.fieldStatesByPath, this.fieldStatePathCounts, this.fieldStateChildren, path);
-  }
-
-  private fieldStates(): Array<[string, FieldState]> {
-    return [...this.fieldStatesByPath.entries()];
-  }
-
-  private setPathStore<V>(store: Map<string, V>, counts: Map<string, number>, children: Map<string, Set<string>>, path: string, value: V): void {
-    if (!store.has(path)) this.addPathToIndex(counts, children, path);
-    store.set(path, value);
-  }
-
-  private deletePathStore<V>(store: Map<string, V>, counts: Map<string, number>, children: Map<string, Set<string>>, path: string): void {
-    if (!store.delete(path)) return;
-    const parts = path.split('.');
-    for (let index = parts.length; index > 0; index -= 1) {
-      const current = parts.slice(0, index).join('.');
-      const count = (counts.get(current) ?? 1) - 1;
-      if (count > 0) {
-        counts.set(current, count);
-        continue;
-      }
-      counts.delete(current);
-      const parent = parts.slice(0, index - 1).join('.');
-      const siblings = children.get(parent);
-      siblings?.delete(parts[index - 1]);
-      if (siblings?.size === 0) children.delete(parent);
-    }
-  }
-
-  private clearPathStore<V>(store: Map<string, V>, counts: Map<string, number>, children: Map<string, Set<string>>): void {
-    store.clear();
-    counts.clear();
-    children.clear();
-  }
-
-  private addPathToIndex(counts: Map<string, number>, children: Map<string, Set<string>>, path: string): void {
-    const parts = path.split('.');
-    for (let index = 1; index <= parts.length; index += 1) {
-      const current = parts.slice(0, index).join('.');
-      counts.set(current, (counts.get(current) ?? 0) + 1);
-      const parent = parts.slice(0, index - 1).join('.');
-      let siblings = children.get(parent);
-      if (!siblings) children.set(parent, siblings = new Set());
-      siblings.add(parts[index - 1]);
-    }
-  }
-
-  private createPathProxy<V extends object>(
-    path: string, store: Map<string, V>, counts: Map<string, number>, children: Map<string, Set<string>>, cache: Map<string, object>,
-  ): object {
-    const cached = cache.get(path);
-    if (cached) return cached;
-    const proxy = new Proxy({}, {
-      get: (_, property) => {
-        if (typeof property !== 'string') return undefined;
-        const current = store.get(path);
-        if (current && property in current) return current[property as keyof V];
-        const childPath = path ? `${path}.${property}` : property;
-        const value = store.get(childPath);
-        if (value && !children.has(childPath)) return value;
-        return counts.has(childPath) ? this.createPathProxy(childPath, store, counts, children, cache) : undefined;
-      },
-      ownKeys: () => [...Object.keys(store.get(path) ?? {}), ...(children.get(path) ?? [])],
-      getOwnPropertyDescriptor: (_, property) => {
-        if (typeof property !== 'string') return undefined;
-        const value = store.get(path);
-        if (value && property in value) return { configurable: true, enumerable: true, value: value[property as keyof V] };
-        return children.get(path)?.has(property) ? { configurable: true, enumerable: true } : undefined;
-      },
-      set: () => false,
-      deleteProperty: () => false,
-    });
-    cache.set(path, proxy);
-    return proxy;
-  }
+  private hasError(path: string): boolean { return this.errorStore.has(path); }
 }

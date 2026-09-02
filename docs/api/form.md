@@ -2,10 +2,14 @@
 
 ## Constructor options
 
-The Form constructor accepts default values, initial values, an optional schema,
-validation modes, and a disabled flag. Mode defaults to onSubmit, reValidateMode to
-onChange, and disabled to false. Initial values populate the current form; default
-values are used by reset and dirty comparison.
+The Form constructor accepts default values, initial values, an optional schema or
+resolver, validation modes, error aggregation settings, and a disabled flag. Mode
+defaults to onSubmit, reValidateMode to onChange, criteriaMode to firstError, and
+disabled to false. Initial values populate the current form; default values are used
+by reset and dirty comparison.
+
+Additional validation options are `context`, `delayError`, and
+`shouldUseNativeValidation`.
 
 ## Observable properties
 
@@ -43,6 +47,15 @@ values are used by reset and dirty comparison.
 | `reset(values?, options?)` | Resets values and selected form state. Passed values become defaults unless `keepDefaultValues` is true. |
 | `resetField(name)` | Resets one field to its default. |
 | `setFocus(name)` | Focuses the field ref when available. |
+
+## Resolver and schemas
+
+`resolver(values, context, options)` may return transformed submit values and nested
+errors. Its `options` contain `criteriaMode`, registered `fields`, selected `names`,
+and `shouldUseNativeValidation`. A resolver takes precedence over `schema`.
+
+Schemas may implement Zod's `safeParseAsync`, Valibot's `~run`, or Standard
+Schema's `~standard.validate` contract.
 
 ## `register(name, options?)`
 

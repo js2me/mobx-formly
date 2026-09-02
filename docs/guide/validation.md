@@ -22,6 +22,7 @@ Nested paths use dot notation, for example `profile.email`.
 - `onSubmit` — submit only (default)
 - `onChange` — after changes
 - `onBlur` — after blur
+- `onTouched` — after the first blur, then after changes
 - `all` — after changes and blur
 
 `reValidateMode` controls how an already-invalid field is revalidated. It defaults to `onChange`.
@@ -33,6 +34,19 @@ Registration supports common field rules alongside the schema:
 Schema errors and registration rules are both evaluated. The field state contains the resulting error for that field.
 
 Rules are checked in this order: `required`, length and numeric bounds, `pattern`, then `validate`. The first failing rule for a field is exposed. A rule validator receives both the field value and the current form snapshot and may return `true`, `false`, an error message, or a promise of one of those values.
+
+Set `criteriaMode: 'all'` to retain every failing rule and schema issue in
+`error.types`; the default `firstError` mode retains only the first error.
+
+Validation can be supplied with a custom `resolver(values, context, options)`.
+The resolver receives `context` and returns either `{ values, errors: {} }` or
+`{ values: {}, errors }`. Resolver values are passed to `onValid` after submission.
+Zod-like schemas, Valibot schemas, and Standard Schema objects are supported;
+`resolver` takes precedence over `schema`.
+
+`delayError` delays displaying validation errors in milliseconds. Clearing an error
+is immediate. With `shouldUseNativeValidation`, registered DOM elements receive
+`setCustomValidity` and `reportValidity` calls.
 
 ## Manual errors
 
