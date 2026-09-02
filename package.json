@@ -1,6 +1,6 @@
 {
   "name": "mobx-formly",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "Framework-agnostic observable forms for MobX with granular field state and Zod or Valibot validation",
   "homepage": "https://js2me.github.io/mobx-formly/",
   "repository": {
