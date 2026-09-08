@@ -4,7 +4,7 @@ layout: home
 hero:
   name: mobx-formly
   text: Observable forms for MobX
-  tagline: A framework-agnostic Form controller with granular field state and Zod or Valibot validation.
+  tagline: A framework-agnostic Form controller with granular field state and schema or resolver validation.
   actions:
     - theme: brand
       text: Get started
@@ -22,11 +22,11 @@ features:
     details: Read fieldState.email.error without subscribing to unrelated fields.
   - title: Schema adapters
     icon: ✅
-    details: Use Zod, Valibot, or any compatible safe-parse schema. Async validation works out of the box.
+    details: Use Zod, Valibot, Standard Schema, or a custom resolver. Async validation works out of the box.
 ---
 
 ## Why mobx-formly?
 
 `mobx-formly` provides a small form controller for applications that already use MobX. It does not depend on React and does not require React hooks. Values, errors, touched state, and submission state are observable; aggregate state is exposed through computed properties.
 
-Continue with the [getting started guide](/guide/getting-started), then see [validation](/guide/validation), [MobX reactivity](/guide/reactivity), and the [Form API](/api/form).
+Continue with the [getting started guide](/guide/getting-started), then read the [Form model](/guide/form-model), [validation](/guide/validation), [MobX reactivity](/guide/reactivity), and the [Form API](/api/form).

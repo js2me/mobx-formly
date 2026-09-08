@@ -44,6 +44,9 @@ The resolver receives `context` and returns either `{ values, errors: {} }` or
 Zod-like schemas, Valibot schemas, and Standard Schema objects are supported;
 `resolver` takes precedence over `schema`.
 
+The resolver `options` include the selected field `names`, registered `fields`,
+`criteriaMode`, and `shouldUseNativeValidation`.
+
 `delayError` delays displaying validation errors in milliseconds. Clearing an error
 is immediate. With `shouldUseNativeValidation`, registered DOM elements receive
 `setCustomValidity` and `reportValidity` calls.

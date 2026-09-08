@@ -2,7 +2,7 @@ import { defineConfig } from 'docusite'
 
 export default defineConfig({
   title: 'mobx-formly',
-  description: 'Observable, framework-agnostic forms for MobX 6 with Zod validation.',
+  description: 'Observable, framework-agnostic forms for MobX 6 with schema and resolver validation.',
   base: '/mobx-formly/',
   github: 'https://github.com/js2me/mobx-formly',
   colors: {
@@ -28,6 +28,7 @@ export default defineConfig({
         text: 'Guide',
         items: [
           { text: 'Getting started', link: '/guide/getting-started' },
+          { text: 'Form model', link: '/guide/form-model' },
           { text: 'Validation', link: '/guide/validation' },
           { text: 'MobX reactivity', link: '/guide/reactivity' },
         ],

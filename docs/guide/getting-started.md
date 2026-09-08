@@ -23,8 +23,9 @@ request immediate validation.
 ## Submit
 
 Submitting validates the form before calling the valid or invalid handler. The valid
-handler receives a plain snapshot of the current values, while the invalid handler
-receives field errors. The invalid handler is optional.
+handler receives plain values: resolver-transformed values when a resolver returns
+them, otherwise a snapshot of the current form values. The invalid handler receives
+field errors and is optional.
 
 ## Reset and direct mutations
 
