@@ -62,3 +62,19 @@ test('exposes nested errors through the value tree', () => {
   expectTypeOf(form.errors.remotes?.[0]?.name).toEqualTypeOf<import('../src/index.js').FieldError | undefined>();
   expectTypeOf(form.fieldState.remotes?.[0]?.name?.isValidating).toEqualTypeOf<boolean | undefined>();
 });
+
+test('infers Map field paths, root errors, and async mutate results', () => {
+  const form = new Form<{ settings: Map<'primary', { enabled: boolean }> }>({
+    defaultValues: { settings: new Map([['primary', { enabled: true }]]) },
+  });
+
+  form.register('settings.primary.enabled');
+  form.setValue('settings.primary.enabled', false);
+  form.setError('root.server', { type: 'server' });
+  form.clearErrors('root.server');
+  expectTypeOf(form.errors.root?.server?.message).toEqualTypeOf<string | undefined>();
+  expectTypeOf(form.mutate(() => {})).toEqualTypeOf<void>();
+  expectTypeOf(form.mutate(async () => {})).toEqualTypeOf<Promise<void>>();
+  // @ts-expect-error Map keys participate in checked field paths.
+  form.setValue('settings.secondary.enabled', false);
+});

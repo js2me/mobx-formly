@@ -58,16 +58,25 @@ export type SchemaOutput<S> = S extends SafeParseFormSchema<infer T>
     : never;
 /** Dot-separated path into the form value tree, for example `user.email`. */
 export type FieldPath<T = FieldValues> = 'root' | {
-  [K in Extract<keyof T, string>]: T[K] extends readonly unknown[]
-    ? T[K] extends readonly (infer I)[]
-      ? I extends object
-        ? K | `${K}.${number}` | `${K}.${number}.${FieldPath<I>}`
-        : K | `${K}.${number}`
-      : K
-    : T[K] extends object
-      ? K | `${K}.${FieldPath<T[K]>}`
-      : K
+  [K in Extract<keyof T, string>]: FieldPathForValue<K, T[K]>
 }[Extract<keyof T, string>];
+
+type FieldPathForValue<K extends string, V> =
+  V extends readonly (infer I)[]
+    ? I extends object
+      ? K | `${K}.${number}` | `${K}.${number}.${FieldPath<I>}`
+      : K | `${K}.${number}`
+    : V extends ReadonlyMap<infer MapKey, infer MapValue>
+      ? MapKey extends string
+        ? MapValue extends object
+          ? K | `${K}.${MapKey}` | `${K}.${MapKey}.${FieldPath<MapValue>}`
+          : K | `${K}.${MapKey}`
+        : K
+      : V extends Date | RegExp | ReadonlySet<unknown>
+        ? K
+        : V extends object
+          ? K | `${K}.${FieldPath<V>}`
+          : K;
 
 export type FieldPathValue<T, P extends string> =
   P extends `${infer K}.${infer Rest}`
@@ -75,11 +84,15 @@ export type FieldPathValue<T, P extends string> =
       ? FieldPathValue<T[K], Rest>
       : T extends readonly (infer I)[]
         ? FieldPathValue<I, Rest>
-      : never
+        : T extends ReadonlyMap<infer MapKey, infer MapValue>
+          ? K extends MapKey ? FieldPathValue<MapValue, Rest> : never
+          : never
     : P extends keyof T ? T[P]
       : T extends readonly (infer I)[]
         ? P extends `${number}` ? I : never
-        : never;
+        : T extends ReadonlyMap<infer MapKey, infer MapValue>
+          ? P extends MapKey ? MapValue : never
+          : never;
 
 export interface FieldError {
   type: string;
@@ -96,13 +109,23 @@ export type FieldValidate<TValue = unknown, TValues extends FieldValues = FieldV
   values: TValues,
 ) => ValidateResult | Promise<ValidateResult>;
 
-export type FieldErrors<T extends object = FieldValues> = {
-  [K in keyof T]?: T[K] extends readonly (infer I)[]
+export type ErrorNamespacePath = 'root' | `root.${string}`;
+export type GlobalErrors = FieldError & Record<string, FieldError | undefined>;
+
+type FieldErrorTree<V> =
+  V extends readonly (infer I)[]
     ? FieldError & Array<I extends object ? FieldErrors<I> : FieldError | undefined>
-    : T[K] extends object
-      ? FieldError & FieldErrors<T[K]>
-      : FieldError;
-} & { root?: FieldError };
+    : V extends ReadonlyMap<infer MapKey, infer MapValue>
+      ? FieldError & (MapKey extends string ? { [K in MapKey]?: FieldErrorTree<MapValue> } : {})
+      : V extends Date | RegExp | ReadonlySet<unknown>
+        ? FieldError
+        : V extends object
+          ? FieldError & FieldErrors<V>
+          : FieldError;
+
+export type FieldErrors<T extends object = FieldValues> = {
+  [K in keyof T]?: FieldErrorTree<T[K]>;
+} & { root?: GlobalErrors };
 
 export interface FieldState {
   invalid: boolean;
@@ -112,12 +135,19 @@ export interface FieldState {
   error?: FieldError;
 }
 
-export type FieldStateTree<T extends object = FieldValues> = {
-  [K in keyof T]?: T[K] extends readonly (infer I)[]
+type FieldStateValueTree<V> =
+  V extends readonly (infer I)[]
     ? FieldState & Array<I extends object ? FieldStateTree<I> : FieldState | undefined>
-    : T[K] extends object
-      ? FieldState & FieldStateTree<T[K]>
-      : FieldState;
+    : V extends ReadonlyMap<infer MapKey, infer MapValue>
+      ? FieldState & (MapKey extends string ? { [K in MapKey]?: FieldStateValueTree<MapValue> } : {})
+      : V extends Date | RegExp | ReadonlySet<unknown>
+        ? FieldState
+        : V extends object
+          ? FieldState & FieldStateTree<V>
+          : FieldState;
+
+export type FieldStateTree<T extends object = FieldValues> = {
+  [K in keyof T]?: FieldStateValueTree<T[K]>;
 } & { root?: FieldState };
 
 export interface FormState<T extends FieldValues = FieldValues> {
@@ -168,6 +198,18 @@ export interface SetErrorConfig {
   shouldFocus?: boolean;
 }
 
+export interface TriggerConfig {
+  shouldFocus?: boolean;
+  shouldTouch?: boolean;
+}
+
+export interface ResetFieldOptions<T extends FieldValues, P extends FieldPath<T>> {
+  keepDirty?: boolean;
+  keepTouched?: boolean;
+  keepError?: boolean;
+  defaultValue?: FieldPathValue<T, P>;
+}
+
 export interface ResetOptions {
   keepDefaultValues?: boolean;
   keepValues?: boolean;
@@ -194,6 +236,7 @@ export interface FormOptions<T extends FieldValues> {
   criteriaMode?: 'firstError' | 'all';
   delayError?: number;
   shouldUseNativeValidation?: boolean;
+  shouldFocusError?: boolean;
   disabled?: boolean;
 }
 

@@ -24,16 +24,26 @@ export const getAtPath = (source: unknown, path: string): unknown =>
 
 export const setAtPath = (target: Record<string, unknown>, path: string, value: unknown): void => {
   const keys = path.split('.');
-  let current: Record<string, unknown> = target;
+  let current: unknown = target;
   for (const [index, key] of keys.slice(0, -1).entries()) {
     if (isUnsafeProperty(key)) return;
-    const next = current[key];
     const nextKey = keys[index + 1];
-    if (!next || typeof next !== 'object') current[key] = /^\d+$/.test(nextKey) ? [] : {};
-    current = current[key] as Record<string, unknown>;
+    const create = () => /^\d+$/.test(nextKey) ? [] : {};
+    if (current instanceof Map || isObservableMap(current)) {
+      let next = current.get(key);
+      if (!next || typeof next !== 'object') current.set(key, next = create());
+      current = next;
+    } else {
+      const record = current as Record<string, unknown>;
+      let next = record[key];
+      if (!next || typeof next !== 'object') record[key] = next = create();
+      current = next;
+    }
   }
   const lastKey = keys.at(-1);
-  if (lastKey && !isUnsafeProperty(lastKey)) current[lastKey] = value;
+  if (!lastKey || isUnsafeProperty(lastKey)) return;
+  if (current instanceof Map || isObservableMap(current)) current.set(lastKey, value);
+  else (current as Record<string, unknown>)[lastKey] = value;
 };
 
 export const deleteAtPath = (target: Record<string, unknown>, path: string): void => {
@@ -42,10 +52,12 @@ export const deleteAtPath = (target: Record<string, unknown>, path: string): voi
   if (!lastKey || isUnsafeProperty(lastKey)) return;
   const parent = keys.reduce<unknown>((value, key) => {
     if (isUnsafeProperty(key) || !value || typeof value !== 'object') return undefined;
+    if (value instanceof Map || isObservableMap(value)) return value.get(key);
     return (value as Record<string, unknown>)[key];
   }, target);
   if (!parent || typeof parent !== 'object') return;
-  delete (parent as Record<string, unknown>)[lastKey];
+  if (parent instanceof Map || isObservableMap(parent)) parent.delete(lastKey);
+  else delete (parent as Record<string, unknown>)[lastKey];
 };
 
 /** Compares form values while preserving Maps, Sets, Dates, and RegExps. */

@@ -1,13 +1,17 @@
 import { action, computed, makeObservable, observable, runInAction } from 'mobx';
 import { createRef, type Ref } from 'yummies/mobx';
 import type {
-  FieldError, FieldErrors, FieldPath, FieldPathValue, FieldState, FieldStateTree, FieldValues, FormOptions,
-  RegisterOptions, RegisterReturn, ResetOptions, SetErrorConfig, SetValueConfig, SubmitHandlers,
+  ErrorNamespacePath, FieldError, FieldErrors, FieldPath, FieldPathValue, FieldState, FieldStateTree, FieldValues,
+  FormOptions, RegisterOptions, RegisterReturn, ResetFieldOptions, ResetOptions, SetErrorConfig, SetValueConfig,
+  SubmitHandlers, TriggerConfig,
 } from './types.js';
 import { clone, deleteAtPath, extractValue, getAtPath, isEqual, setAtPath } from './utils.js';
 import { collectChangedPaths, collectDirtyPaths, collectErrorPaths, findErrorAtPath } from './utils.js';
 import { PathStore } from './path-store.js';
 import { FormValidator } from './validation.js';
+
+const isPromiseLike = (value: unknown): value is Promise<void> =>
+  !!value && typeof (value as Promise<void>).then === 'function';
 
 export class Form<T extends FieldValues = FieldValues> {
   /**
@@ -88,7 +92,7 @@ export class Form<T extends FieldValues = FieldValues> {
    */
   readonly refs = new Map<string, Ref<HTMLElement | null>>();
 
-  private readonly options: Required<Pick<FormOptions<T>, 'mode' | 'reValidateMode' | 'disabled'>> & FormOptions<T>;
+  private readonly options: Required<Pick<FormOptions<T>, 'mode' | 'reValidateMode' | 'disabled' | 'shouldFocusError'>> & FormOptions<T>;
   private readonly fieldOptions = new Map<string, RegisterOptions<T>>();
   private readonly touchedValidationFields = new Set<string>();
   private readonly validator: FormValidator<T>;
@@ -111,6 +115,7 @@ export class Form<T extends FieldValues = FieldValues> {
       mode: options.mode ?? 'onSubmit',
       reValidateMode: options.reValidateMode ?? 'onChange',
       disabled: options.disabled ?? false,
+      shouldFocusError: options.shouldFocusError ?? true,
     };
     this.defaultValues = clone((options.defaultValues ?? {}) as T);
     this.values = clone((options.values ?? options.defaultValues ?? {}) as T);
@@ -135,6 +140,7 @@ export class Form<T extends FieldValues = FieldValues> {
       disabled: computed,
       isDirty: computed,
       isTouched: computed,
+      isValidating: computed,
       isValid: computed,
       snapshot: computed,
       register: action,
@@ -172,6 +178,9 @@ export class Form<T extends FieldValues = FieldValues> {
    */
   get isTouched(): boolean { return Object.keys(this.touchedFields).length > 0; }
 
+  /** Whether any field validation is currently running. */
+  get isValidating(): boolean { return Object.keys(this.validatingFields).length > 0; }
+
   /**
    * Whether the form has no errors. With a schema or resolver the first read
    * schedules a full validation pass, so validity reflects the schema instead
@@ -198,11 +207,7 @@ export class Form<T extends FieldValues = FieldValues> {
   register(name: FieldPath<T>, options: RegisterOptions<T> = {}): RegisterReturn {
     const path = name as FieldPath<T> & string;
     this.fieldOptions.set(path, options);
-    let ref = this.refs.get(path);
-    if (!ref) {
-      ref = createRef<HTMLElement | null>();
-      this.refs.set(path, ref);
-    }
+    const ref = this.ref(name);
     this.ensureFieldState(path);
     return {
       name: path,
@@ -231,6 +236,20 @@ export class Form<T extends FieldValues = FieldValues> {
         }
       },
     };
+  }
+
+  /**
+   * Returns the stable MobX-aware ref for a field path, creating it on demand.
+   * The ref can be used by a view adapter before the field is registered.
+   */
+  ref(name: FieldPath<T>): Ref<HTMLElement | null> {
+    const path = name as string;
+    let ref = this.refs.get(path);
+    if (!ref) {
+      ref = createRef<HTMLElement | null>();
+      this.refs.set(path, ref);
+    }
+    return ref;
   }
 
   /**
@@ -270,9 +289,24 @@ export class Form<T extends FieldValues = FieldValues> {
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#mutatemutator-config)
    */
-  mutate(mutator: () => void, config: SetValueConfig = {}): void {
+  mutate(mutator: () => Promise<void>, config?: SetValueConfig): Promise<void>;
+  mutate(mutator: () => void, config?: SetValueConfig): void;
+  mutate(mutator: () => void | Promise<void>, config: SetValueConfig = {}): void | Promise<void> {
     const before = clone(this.values);
-    mutator();
+    const result = mutator();
+    if (isPromiseLike(result)) {
+      return result.then(
+        () => runInAction(() => this.finishMutation(before, config)),
+        (error) => {
+          runInAction(() => this.finishMutation(before, config));
+          throw error;
+        },
+      );
+    }
+    this.finishMutation(before, config);
+  }
+
+  private finishMutation(before: T, config: SetValueConfig): void {
     if (isEqual(before, this.values)) return;
     const changedPaths = collectChangedPaths(before, this.values);
     const dirtyPaths = collectDirtyPaths(this.values, this.defaultValues);
@@ -292,7 +326,7 @@ export class Form<T extends FieldValues = FieldValues> {
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#seterrorname-error)
    */
-  setError(name: FieldPath<T>, error: FieldError, config: SetErrorConfig = {}): void {
+  setError(name: FieldPath<T> | ErrorNamespacePath, error: FieldError, config: SetErrorConfig = {}): void {
     const path = name as FieldPath<T> & string;
     this.validator.cancelDelayed(path);
     this.applyError(path, error);
@@ -304,7 +338,7 @@ export class Form<T extends FieldValues = FieldValues> {
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#clearerrorsname)
    */
-  clearErrors(name?: FieldPath<T> | FieldPath<T>[]): void {
+  clearErrors(name?: FieldPath<T> | ErrorNamespacePath | Array<FieldPath<T> | ErrorNamespacePath>): void {
     if (!name) {
       this.validator.cancelAllDelayed();
       this.isValidOverride.set(undefined);
@@ -313,8 +347,7 @@ export class Form<T extends FieldValues = FieldValues> {
       return;
     }
     for (const path of Array.isArray(name) ? name : [name]) {
-      this.validator.cancelDelayed(path as string);
-      this.applyError(path as FieldPath<T> & string, undefined);
+      this.clearErrorPath(path as string);
     }
   }
 
@@ -323,8 +356,12 @@ export class Form<T extends FieldValues = FieldValues> {
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#triggername)
    */
-  async trigger(name?: FieldPath<T> | FieldPath<T>[]): Promise<boolean> {
-    return (await this.runValidation(name)).valid;
+  async trigger(name?: FieldPath<T> | FieldPath<T>[], config: TriggerConfig = {}): Promise<boolean> {
+    const paths = name ? (Array.isArray(name) ? name : [name]).map(String) : [...this.fieldOptions.keys()];
+    if (config.shouldTouch) for (const path of paths) this.markTouched(path);
+    const valid = (await this.runValidation(name)).valid;
+    if (!valid && config.shouldFocus) this.focusFirstError(paths);
+    return valid;
   }
 
   private async runValidation(name?: FieldPath<T> | FieldPath<T>[]): Promise<{ valid: boolean; values?: T }> {
@@ -389,6 +426,7 @@ export class Form<T extends FieldValues = FieldValues> {
             if (this.resetVersion === submissionResetVersion) this.isSubmitSuccessful = true;
           });
         } else {
+          if (this.options.shouldFocusError) this.focusFirstError();
           await onInvalid?.(this.errors, this);
           runInAction(() => {
             if (this.resetVersion === submissionResetVersion) this.isSubmitSuccessful = false;
@@ -456,18 +494,21 @@ export class Form<T extends FieldValues = FieldValues> {
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#resetfieldname)
    */
-  resetField(name: FieldPath<T>): void {
+  resetField<P extends FieldPath<T>>(name: P, options: ResetFieldOptions<T, P> = {}): void {
     const path = name as string;
     this.validator.cancelDelayed(path);
     this.touchedValidationFields.delete(path);
     this.fieldValidationVersions.set(path, (this.fieldValidationVersions.get(path) ?? 0) + 1);
-    setAtPath(this.values, path, clone(getAtPath(this.defaultValues, path)));
-    this.applyError(path, undefined); delete this.dirtyFields[path]; delete this.touchedFields[path];
+    if ('defaultValue' in options) setAtPath(this.defaultValues, path, clone(options.defaultValue));
+    setAtPath(this.values, path, clone('defaultValue' in options ? options.defaultValue : getAtPath(this.defaultValues, path)));
+    if (!options.keepError) this.applyError(path, undefined);
+    if (!options.keepDirty) delete this.dirtyFields[path];
+    if (!options.keepTouched) delete this.touchedFields[path];
     delete this.validatingFields[path];
     const state = this.ensureFieldState(path);
-    this.applyFieldState(state, undefined);
-    state.isDirty = false;
-    state.isTouched = false;
+    if (!options.keepError) this.applyFieldState(state, undefined);
+    state.isDirty = options.keepDirty ? !!this.dirtyFields[path] : false;
+    state.isTouched = options.keepTouched ? !!this.touchedFields[path] : false;
     state.isValidating = false;
   }
 
@@ -491,6 +532,33 @@ export class Form<T extends FieldValues = FieldValues> {
     this.dirtyFields = Object.fromEntries(paths.map((path) => [path, true]));
     for (const [path, state] of this.fieldStateStore.entries()) state.isDirty = dirty.has(path);
     for (const path of paths) this.ensureFieldState(path).isDirty = true;
+  }
+
+  /** Clears an exact error path and every nested error below it. */
+  private clearErrorPath(path: string): void {
+    const paths = this.errorStore.paths().filter((stored) => stored === path || stored.startsWith(`${path}.`));
+    if (!paths.length) {
+      this.validator.cancelDelayed(path);
+      this.applyError(path, undefined);
+      return;
+    }
+    for (const storedPath of paths) {
+      this.validator.cancelDelayed(storedPath);
+      this.applyError(storedPath, undefined);
+    }
+  }
+
+  /** Focuses the first errored registered field, skipping form-level errors. */
+  private focusFirstError(paths?: string[]): void {
+    const candidates = paths ?? this.errorStore.paths();
+    for (const path of candidates) {
+      if (!this.hasError(path)) continue;
+      const ref = this.refs.get(path)?.current;
+      if (ref?.focus) {
+        ref.focus();
+        return;
+      }
+    }
   }
 
   private dependentFields(deps: RegisterOptions<T>['deps']): string[] {

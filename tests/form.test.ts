@@ -70,6 +70,16 @@ describe('Form', () => {
     expect(form.fieldState.age?.isDirty).toBe(false);
   });
 
+  it('creates stable refs on demand and shares them with register', () => {
+    const form = new Form<{ name: string }>({ defaultValues: { name: '' } });
+    const standalone = form.ref('name');
+
+    expect(form.ref('name')).toBe(standalone);
+    expect(form.register('name').ref).toBe(standalone);
+    form.unregister('name');
+    expect(form.ref('name')).not.toBe(standalone);
+  });
+
   it('accepts Valibot schemas through FormSchema', async () => {
     const form = new Form({
       defaultValues: { email: '' },

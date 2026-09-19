@@ -9,7 +9,8 @@ disabled to false. Initial values populate the current form; default values are 
 by reset and dirty comparison.
 
 Additional validation options are `context`, `delayError`, and
-`shouldUseNativeValidation`.
+`shouldUseNativeValidation`. `shouldFocusError` defaults to `true` and focuses
+the first registered errored field after an invalid submit.
 
 ## Observable properties
 
@@ -25,6 +26,7 @@ Additional validation options are `context`, `delayError`, and
 | `isDirty` | Computed aggregate dirty flag. |
 | `isTouched` | Computed aggregate touched flag. |
 | `isValid` | Computed aggregate validity flag. With a schema or resolver the first read schedules a full validation pass, so the flag reflects the schema instead of defaulting to true until something validates. |
+| `isValidating` | Computed aggregate flag for pending field validation. |
 | `isSubmitting` | Whether a submit handler is running. |
 | `isSubmitted` | Whether submit has been attempted. |
 | `isSubmitSuccessful` | Whether the latest submit succeeded. |
@@ -37,15 +39,16 @@ Additional validation options are `context`, `delayError`, and
 | Method | Description |
 | --- | --- |
 | `register(name, options?)` | Returns `name`, `ref`, `onChange`, and `onBlur`. |
+| `ref(name)` | Returns a stable MobX-aware ref for a field path, creating it on demand. |
 | `unregister(name)` | Removes a field and its state. |
 | `setValue(name, value, config?)` | Updates a value and optionally marks or validates it. |
 | `mutate(mutator, config?)` | Groups several value changes into one form update, rebuilds dirty paths from the complete value tree, and can validate the complete form. |
 | `setError(name, error, config?)` | Sets a field error. `config.shouldFocus` focuses the field ref. |
 | `clearErrors(name?)` | Clears one, many, or all errors. |
-| `trigger(name?)` | Runs schema and rule validation. |
+| `trigger(name?, config?)` | Runs schema and rule validation. `config.shouldTouch` marks targeted fields touched; `config.shouldFocus` focuses the first targeted error. |
 | `handleSubmit(handlers)` | Returns an async submit function. Validates before calling `onValid` or `onInvalid`. `onValid` receives schema or resolver output values, so schema transforms and coercions reach the submit handler. |
 | `reset(values?, options?)` | Resets values and selected form state. Passed values become defaults unless `keepDefaultValues` is true. |
-| `resetField(name)` | Resets one field to its default. |
+| `resetField(name, options?)` | Resets one field to its default and can preserve dirty, touched, or error state, or set a new field default. |
 | `setFocus(name)` | Focuses the field ref when available. |
 
 ## Resolver and schemas
@@ -75,6 +78,12 @@ Supported registration options:
 | `valueAsNumber`, `valueAsDate` | Convert event values before storing them. |
 | `setValueAs` | Custom value transformation. |
 
+## `ref(name)`
+
+Returns the same `createRef()` result as `register(name).ref` without registering
+validation options or field state. It is useful for adapters that need to attach
+a ref before registration. The cached ref is removed by `unregister(name)`.
+
 ## `setValue(name, value, config?)`
 
 `config` supports `shouldDirty`, `shouldTouch`, and `shouldValidate`. Dirty tracking and
@@ -92,7 +101,8 @@ error or validation update, and `keepIsValidating` keeps the `validatingFields` 
 `fieldState.isValidating` flags until the next validation update. In-flight validation
 is still discarded by reset.
 `resetField(name)` resets one field to its current default value and clears its
-field state.
+field state. Its options are `keepDirty`, `keepTouched`, `keepError`, and
+`defaultValue`. A supplied `defaultValue` becomes the field's new default.
 
 ## Array fields
 
@@ -121,3 +131,22 @@ values because they cannot be cloned reliably.
 callback as touched by default. Pass `{ shouldTouch: false }` to opt out. This is
 a programmatic touch policy, not a substitute for the user-interaction touch
 state set by registered `onBlur` handlers.
+
+`mutate` accepts either a synchronous callback or an async callback. The async
+overload returns `Promise<void>` and reconciles dirty, touched, and validation
+state after the callback settles. In projects using MobX `enforceActions`, any
+value writes after `await` must still be wrapped in MobX `runInAction`.
+
+## Root errors and Map paths
+
+Use a root namespace for server or form-level errors that do not belong to a
+field:
+
+```ts
+form.setError('root.server', { type: 'server', message: 'Try again' });
+form.clearErrors('root');
+```
+
+`Map<string, V>` fields support dot paths through string keys, for example
+`settings.primary.enabled`, in `register`, `setValue`, `resetField`, errors, and
+field state. Maps with non-string keys and sets are atomic field values.
