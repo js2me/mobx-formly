@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { autorun } from 'mobx';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('field array lifecycle scenario', () => {
   it('supports add, update, remove, reorder, and reactive array changes', () => {
-    const form = new Form<{ items: Array<{ name: string }> }>({ defaultValues: { items: [] } });
+    const form = new BaseForm<{ items: Array<{ name: string }> }>({ defaultValues: { items: [] } });
     const observed: number[] = [];
     const dispose = autorun(() => observed.push(form.values.items.length));
     form.values.items.push({ name: 'One' });

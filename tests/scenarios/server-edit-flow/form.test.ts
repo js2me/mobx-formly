@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('server edit flow', () => {
   it('keeps user field state through a server normalization error and clears the root namespace', () => {
-    const form = new Form({ defaultValues: { title: 'Initial title', slug: 'initial-title' } });
+    const form = new BaseForm({ defaultValues: { title: 'Initial title', slug: 'initial-title' } });
     form.register('title');
     form.register('slug');
 

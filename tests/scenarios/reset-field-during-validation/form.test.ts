@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('reset field during validation scenario', () => {
   it('ignores a validation result that finishes after resetField', async () => {
     let resolveValidation!: (valid: boolean) => void;
-    const form = new Form({ defaultValues: { name: 'old' } });
+    const form = new BaseForm({ defaultValues: { name: 'old' } });
     form.register('name', {
       validate: () => new Promise<boolean>((resolve) => { resolveValidation = resolve; }),
     });

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('validation race scenario', () => {
   it('keeps the newest setValue validation result', async () => {
     const pending: Array<{ value: string; resolve: (valid: boolean) => void }> = [];
-    const form = new Form({ values: { name: '' } });
+    const form = new BaseForm({ values: { name: '' } });
     form.register('name', { validate: (value) => new Promise<boolean>((resolve) => pending.push({ value: String(value), resolve })) });
 
     form.setValue('name', 'old', { shouldValidate: true });
@@ -20,7 +20,7 @@ describe('validation race scenario', () => {
 
   it('removes an unregistered field while its validation is pending', async () => {
     let resolveValidation!: (valid: boolean) => void;
-    const form = new Form({ values: { name: 'Ada' } });
+    const form = new BaseForm({ values: { name: 'Ada' } });
     form.register('name', { validate: () => new Promise<boolean>((resolve) => { resolveValidation = resolve; }) });
     const validation = form.trigger('name');
     await vi.waitFor(() => expect(form.fieldState.name?.isValidating).toBe(true));

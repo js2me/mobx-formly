@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('schema transform scenario', () => {
   it('submits schema-transformed values while keeping raw values observable', async () => {
     const onValid = vi.fn();
     const schema = z.object({ age: z.string().transform(Number).pipe(z.number().min(18)) });
-    const form = new Form<{ age: string }>({
+    const form = new BaseForm<{ age: string }>({
       values: { age: '21' },
       schema: schema as never,
     });
@@ -19,7 +19,7 @@ describe('schema transform scenario', () => {
     const onValid = vi.fn();
     const onInvalid = vi.fn();
     const schema = z.object({ age: z.string().transform(Number).pipe(z.number().min(18)) });
-    const form = new Form<{ age: string }>({
+    const form = new BaseForm<{ age: string }>({
       values: { age: '10' },
       schema: schema as never,
     });
@@ -30,7 +30,7 @@ describe('schema transform scenario', () => {
 
   it('coerces values for resolver-based submit through transformed output', async () => {
     const onValid = vi.fn();
-    const form = new Form<{ age: string }>({
+    const form = new BaseForm<{ age: string }>({
       values: { age: '21' },
       resolver: (values) => ({ values: { age: Number(values.age) }, errors: {} }),
     });

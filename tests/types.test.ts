@@ -1,10 +1,10 @@
 import { expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import * as v from 'valibot';
-import { Form } from '../src/index.js';
+import { BaseForm } from '../src/index.js';
 
 test('infers field types and paths from Zod schemas', () => {
-  const form = new Form({
+  const form = new BaseForm({
     schema: z.object({
       email: z.string(),
       profile: z.object({ age: z.number() }),
@@ -23,7 +23,7 @@ test('infers field types and paths from Zod schemas', () => {
 });
 
 test('infers field types and paths from Valibot schemas', () => {
-  const form = new Form({
+  const form = new BaseForm({
     schema: v.object({
       name: v.string(),
       settings: v.object({ enabled: v.boolean() }),
@@ -41,7 +41,7 @@ test('infers field types and paths from Valibot schemas', () => {
 });
 
 test('infers array field paths and values', () => {
-  const form = new Form<{ items: Array<{ label: string; count: number }> }>({
+  const form = new BaseForm<{ items: Array<{ label: string; count: number }> }>({
     defaultValues: { items: [{ label: '', count: 0 }] },
   });
 
@@ -55,7 +55,7 @@ test('infers array field paths and values', () => {
 });
 
 test('exposes nested errors through the value tree', () => {
-  const form = new Form<{ remotes: Array<{ name: string }> }>({
+  const form = new BaseForm<{ remotes: Array<{ name: string }> }>({
     defaultValues: { remotes: [{ name: '' }] },
   });
 
@@ -64,7 +64,7 @@ test('exposes nested errors through the value tree', () => {
 });
 
 test('infers Map field paths, root errors, and async mutate results', () => {
-  const form = new Form<{ settings: Map<'primary', { enabled: boolean }> }>({
+  const form = new BaseForm<{ settings: Map<'primary', { enabled: boolean }> }>({
     defaultValues: { settings: new Map([['primary', { enabled: true }]]) },
   });
 

@@ -2,12 +2,12 @@ import { autorun } from 'mobx';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import * as v from 'valibot';
-import { createForm, Form } from '../src/index.js';
+import { createForm, BaseForm } from '../src/index.js';
 import { deleteAtPath, extractValue, getAtPath, setAtPath } from '../src/utils.js';
 
 describe('Form', () => {
   it('tracks values and field state reactively', async () => {
-    const form = new Form({ defaultValues: { user: { name: '' } }, mode: 'onChange' });
+    const form = new BaseForm({ defaultValues: { user: { name: '' } }, mode: 'onChange' });
     const observed: boolean[] = [];
     const dispose = autorun(() => observed.push(form.isDirty));
 
@@ -22,7 +22,7 @@ describe('Form', () => {
   });
 
   it('tracks touched fields reactively', async () => {
-    const form = new Form({ defaultValues: { name: '' }, mode: 'onChange' });
+    const form = new BaseForm({ defaultValues: { name: '' }, mode: 'onChange' });
     const observed: boolean[] = [];
     const dispose = autorun(() => observed.push(form.isTouched));
 
@@ -42,7 +42,7 @@ describe('Form', () => {
   it('validates Zod schemas and submit handlers', async () => {
     const onValid = vi.fn();
     const onInvalid = vi.fn();
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { email: '' },
       schema: z.object({ email: z.string().email('Invalid email') }),
     });
@@ -59,7 +59,7 @@ describe('Form', () => {
   });
 
   it('provides RHF-like registration, reset, and refs', async () => {
-    const form = new Form({ defaultValues: { age: 1 }, mode: 'onChange' });
+    const form = new BaseForm({ defaultValues: { age: 1 }, mode: 'onChange' });
     const register = form.register('age', { valueAsNumber: true, min: { value: 18, message: 'Too young' } });
     await register.onChange({ target: { value: '17' } });
     expect(form.values.age).toBe(17);
@@ -71,7 +71,7 @@ describe('Form', () => {
   });
 
   it('creates stable refs on demand and shares them with register', () => {
-    const form = new Form<{ name: string }>({ defaultValues: { name: '' } });
+    const form = new BaseForm<{ name: string }>({ defaultValues: { name: '' } });
     const standalone = form.ref('name');
 
     expect(form.ref('name')).toBe(standalone);
@@ -81,7 +81,7 @@ describe('Form', () => {
   });
 
   it('accepts Valibot schemas through FormSchema', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { email: '' },
       schema: v.object({ email: v.pipe(v.string(), v.email('Invalid email')) }),
     });
@@ -94,7 +94,7 @@ describe('Form', () => {
   });
 
   it('validates registration rules and all value transforms', async () => {
-    const form = new Form({ defaultValues: { text: '', count: 0, date: new Date(0) }, mode: 'all' });
+    const form = new BaseForm({ defaultValues: { text: '', count: 0, date: new Date(0) }, mode: 'all' });
     const required = form.register('text', {
       required: true,
       minLength: { value: 2, message: 'Short' },
@@ -126,7 +126,7 @@ describe('Form', () => {
   });
 
   it('supports manual errors, touch state, reset options, and unregister', async () => {
-    const form = new Form({ defaultValues: { name: 'Ada', extra: true }, mode: 'onBlur' });
+    const form = new BaseForm({ defaultValues: { name: 'Ada', extra: true }, mode: 'onBlur' });
     const field = form.register('name', { required: 'Required' });
     await field.onBlur();
     expect(form.fieldState.name).toMatchObject({ isTouched: true, isValidating: false });
@@ -173,7 +173,7 @@ describe('Form', () => {
   });
 
   it('focuses a field through setError with shouldFocus', () => {
-    const form = new Form({ defaultValues: { name: '', email: '' } });
+    const form = new BaseForm({ defaultValues: { name: '', email: '' } });
     const name = form.register('name');
     const email = form.register('email');
     const nameInput = { focus: vi.fn() } as unknown as HTMLElement;
@@ -212,7 +212,7 @@ describe('Form', () => {
   });
 
   it('supports constructor values and disabled forms', async () => {
-    const form = new Form({ values: { name: 'Ada' }, disabled: true, mode: 'onChange' });
+    const form = new BaseForm({ values: { name: 'Ada' }, disabled: true, mode: 'onChange' });
     expect(form.values.name).toBe('Ada');
     expect(form.disabled).toBe(true);
     const field = form.register('name', { required: true });
@@ -227,7 +227,7 @@ describe('Form', () => {
 
   it('ignores stale async validation results', async () => {
     const pending: Array<(result: boolean) => void> = [];
-    const form = new Form<{ name: string }>({
+    const form = new BaseForm<{ name: string }>({
       values: { name: '' },
       schema: {
         safeParseAsync: () => new Promise((resolve) => {
@@ -252,7 +252,7 @@ describe('Form', () => {
   });
 
   it('normalizes rejected async validators into field errors', async () => {
-    const form = new Form({ values: { name: 'Ada' } });
+    const form = new BaseForm({ values: { name: 'Ada' } });
     form.register('name', { validate: async () => { throw new Error('network'); } });
     expect(await form.trigger('name')).toBe(false);
     expect(form.errors.name).toEqual({ type: 'validate', message: 'Validation failed' });
@@ -260,7 +260,7 @@ describe('Form', () => {
   });
 
   it('honors every reset option', async () => {
-    const form = new Form({ defaultValues: { name: 'Ada' } });
+    const form = new BaseForm({ defaultValues: { name: 'Ada' } });
     form.register('name');
     form.setValue('name', 'Grace', { shouldTouch: true });
     await form.handleSubmit({ onValid: async () => undefined, onInvalid: async () => undefined })();
@@ -294,7 +294,7 @@ describe('Form', () => {
   });
 
   it('exposes reactive default values', async () => {
-    const form = new Form({ defaultValues: { name: 'Ada' } });
+    const form = new BaseForm({ defaultValues: { name: 'Ada' } });
     const observed: Array<unknown> = [];
     const dispose = autorun(() => observed.push(form.defaultValues.name));
 
@@ -314,7 +314,7 @@ describe('Form', () => {
   });
 
   it('honors keepValues, keepDirtyValues, and keepIsValid reset options', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { name: 'Ada', email: '', nested: { city: 'London' } },
     });
     form.register('name');
@@ -357,7 +357,7 @@ describe('Form', () => {
 
   it('keeps validating state through reset with keepIsValidating', async () => {
     const pending: Array<(valid: boolean) => void> = [];
-    const form = new Form<{ name: string }>({
+    const form = new BaseForm<{ name: string }>({
       defaultValues: { name: '' },
       schema: {
         safeParseAsync: () => new Promise((resolve) => {
@@ -403,7 +403,7 @@ describe('Form', () => {
   });
 
   it('reports schema root issues and preserves unrelated errors', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       values: { first: 'Ada', second: 'Lin' },
       schema: {
         safeParseAsync: async () => ({
@@ -426,7 +426,7 @@ describe('Form', () => {
 
   it('settles concurrent trigger and submit validations', async () => {
     const pending: Array<(valid: boolean) => void> = [];
-    const form = new Form<{ name: string }>({
+    const form = new BaseForm<{ name: string }>({
       values: { name: 'Ada' },
       schema: {
         safeParseAsync: () => new Promise((resolve) => {
@@ -450,7 +450,7 @@ describe('Form', () => {
   });
 
   it('combines schema and rule errors without keeping stale results', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       values: { email: '' },
       schema: z.object({ email: z.string().min(5, 'Schema error') }),
     });
@@ -469,7 +469,7 @@ describe('Form', () => {
   });
 
   it('updates array fields at runtime without replacing the array', () => {
-    const form = new Form<{ items: Array<{ name: string; quantity: number }> }>({
+    const form = new BaseForm<{ items: Array<{ name: string; quantity: number }> }>({
       defaultValues: { items: [{ name: 'One', quantity: 1 }, { name: 'Two', quantity: 2 }] },
     });
 
@@ -484,7 +484,7 @@ describe('Form', () => {
   });
 
   it('reconciles multiple direct mutations through mutate', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { items: [{ name: 'One' }], count: 0 },
       schema: z.object({ items: z.array(z.object({ name: z.string() })), count: z.number().min(1, 'Count is required') }),
     });
@@ -499,7 +499,7 @@ describe('Form', () => {
   });
 
   it('tracks nested mutations and validates changed fields', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { profile: { name: 'Ada' } },
       schema: z.object({ profile: z.object({ name: z.string().min(3, 'Name is too short') }) }),
     });
@@ -514,7 +514,7 @@ describe('Form', () => {
   });
 
   it('respects mutate metadata options', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { count: 1 },
       schema: z.object({ count: z.number().min(3, 'Count is too small') }),
     });
@@ -535,7 +535,7 @@ describe('Form', () => {
   });
 
   it('marks only paths changed by mutate as touched by default', () => {
-    const form = new Form({ defaultValues: { existing: '', changed: '' } });
+    const form = new BaseForm({ defaultValues: { existing: '', changed: '' } });
     form.setValue('existing', 'already dirty', { shouldTouch: false });
 
     form.mutate(() => {
@@ -548,7 +548,7 @@ describe('Form', () => {
   });
 
   it('allows mutate touch tracking to be disabled explicitly', () => {
-    const form = new Form({ defaultValues: { name: '' } });
+    const form = new BaseForm({ defaultValues: { name: '' } });
 
     form.mutate(() => {
       form.values.name = 'Ada';
@@ -558,7 +558,7 @@ describe('Form', () => {
   });
 
   it('marks setValue fields as touched by default and respects explicit opt-out', () => {
-    const form = new Form({ defaultValues: { first: '', second: '' } });
+    const form = new BaseForm({ defaultValues: { first: '', second: '' } });
 
     form.setValue('first', 'Ada');
     form.setValue('second', 'Lin', { shouldTouch: false });
@@ -577,7 +577,7 @@ describe('Form', () => {
       if (value.username === 'taken') context.addIssue({ code: 'custom', path: ['username'], message: 'Username is taken' });
       if (value.confirmation !== value.username) context.addIssue({ code: 'custom', path: ['confirmation'], message: 'Does not match' });
     });
-    const form = new Form({
+    const form = new BaseForm({
       values: { username: 'taken', confirmation: 'other' },
       schema,
     });

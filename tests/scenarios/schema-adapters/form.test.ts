@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as v from 'valibot';
 import { z } from 'zod';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('schema adapter scenario', () => {
   it('maps duplicate issues for a path to the first schema error', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       values: { code: '' },
       schema: z.object({ code: z.string().min(2, 'Too short').regex(/^A/, 'Must start with A') }),
     });
@@ -15,7 +15,7 @@ describe('schema adapter scenario', () => {
   });
 
   it('accepts a Valibot transform while retaining the original form value', async () => {
-    const form = new Form<{ age: string }>({
+    const form = new BaseForm<{ age: string }>({
       values: { age: '21' },
       schema: v.object({ age: v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(18)) }) as never,
     });

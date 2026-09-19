@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('full user flow scenario', () => {
   it('moves from invalid input to a successful submission and back to invalid', async () => {
     const onValid = vi.fn();
     const onInvalid = vi.fn();
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { email: '' },
       mode: 'onChange',
       schema: z.object({ email: z.string().email('Invalid email') }),

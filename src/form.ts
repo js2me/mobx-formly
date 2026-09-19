@@ -13,7 +13,202 @@ import { FormValidator } from './validation.js';
 const isPromiseLike = (value: unknown): value is Promise<void> =>
   !!value && typeof (value as Promise<void>).then === 'function';
 
-export class Form<T extends FieldValues = FieldValues> {
+/**
+ * Public form contract returned by `createForm()` and implemented by `BaseForm`.
+ *
+ * Coordinates form values, field registration, validation, and submission
+ * without any rendering concerns.
+ *
+ * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html)
+ */
+export interface Form<T extends FieldValues = FieldValues> {
+  /**
+   * Current form values.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#values)
+   */
+  values: T;
+  /**
+   * Cached default values used by reset, resetField, and dirty comparison.
+   * Updated by reset unless `keepDefaultValues` is passed.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#defaultvalues)
+   */
+  defaultValues: T;
+  /**
+   * Validation errors nested by field path.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#errors)
+   */
+  readonly errors: FieldErrors<T>;
+  /**
+   * Field paths whose values differ from their defaults.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#dirtyfields)
+   */
+  dirtyFields: Record<string, true | undefined>;
+  /**
+   * Field paths that have been touched.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#touchedfields)
+   */
+  touchedFields: Record<string, true | undefined>;
+  /**
+   * Field paths that are currently being validated.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#validatingfields)
+   */
+  validatingFields: Record<string, true | undefined>;
+  /**
+   * Observable state for each registered field, nested by field path.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#fieldstate)
+   */
+  readonly fieldState: FieldStateTree<T>;
+  /**
+   * Whether a submission is currently running.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#issubmitting)
+   */
+  isSubmitting: boolean;
+  /**
+   * Whether the form has been submitted at least once.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#issubmitted)
+   */
+  isSubmitted: boolean;
+  /**
+   * Whether the latest submission succeeded.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#issubmitsuccessful)
+   */
+  isSubmitSuccessful: boolean;
+  /**
+   * Number of submission attempts.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#submitcount)
+   */
+  submitCount: number;
+  /**
+   * Refs registered for fields.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#refs)
+   */
+  readonly refs: Map<string, Ref<HTMLElement | null>>;
+  /**
+   * Whether registered event handlers ignore changes and blur events.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#disabled)
+   */
+  readonly disabled: boolean;
+  /**
+   * Whether any field is dirty.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#isdirty)
+   */
+  readonly isDirty: boolean;
+  /**
+   * Whether any field has been touched.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#istouched)
+   */
+  readonly isTouched: boolean;
+  /**
+   * Whether any field validation is currently running.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#isvalidating)
+   */
+  readonly isValidating: boolean;
+  /**
+   * Whether the form has no errors. With a schema or resolver the first read
+   * schedules a full validation pass, so validity reflects the schema instead
+   * of defaulting to true until something validates.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#isvalid)
+   */
+  readonly isValid: boolean;
+  /**
+   * Returns a plain copy of the current values.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#snapshot)
+   */
+  readonly snapshot: T;
+  /**
+   * Registers a field and returns its ref and event handlers.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#registername-options)
+   */
+  register(name: FieldPath<T>, options?: RegisterOptions<T>): RegisterReturn;
+  /**
+   * Returns the stable MobX-aware ref for a field path, creating it on demand.
+   * The ref can be used by a view adapter before the field is registered.
+   */
+  ref(name: FieldPath<T>): Ref<HTMLElement | null>;
+  /**
+   * Removes a field, its value, and its associated state.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#unregistername)
+   */
+  unregister(name: FieldPath<T>): void;
+  /**
+   * Updates a field value and optionally changes its state or validates it.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#setvaluename-value-config)
+   */
+  setValue<P extends FieldPath<T>>(name: P, value: FieldPathValue<T, P>, config?: SetValueConfig): void;
+  /**
+   * Groups direct value changes, reconciles all dirty paths, and optionally
+   * validates the complete form.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#mutatemutator-config)
+   */
+  mutate(mutator: () => Promise<void>, config?: SetValueConfig): Promise<void>;
+  mutate(mutator: () => void, config?: SetValueConfig): void;
+  /**
+   * Sets an error for a field and can focus it.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#seterrorname-error)
+   */
+  setError(name: FieldPath<T> | ErrorNamespacePath, error: FieldError, config?: SetErrorConfig): void;
+  /**
+   * Clears one, several, or all field errors.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#clearerrorsname)
+   */
+  clearErrors(name?: FieldPath<T> | ErrorNamespacePath | Array<FieldPath<T> | ErrorNamespacePath>): void;
+  /**
+   * Validates one field, several fields, or the complete form.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#triggername)
+   */
+  trigger(name?: FieldPath<T> | FieldPath<T>[], config?: TriggerConfig): Promise<boolean>;
+  /**
+   * Creates an asynchronous submit handler with validation and result callbacks.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#handlesubmithandlers)
+   */
+  handleSubmit(handlers: SubmitHandlers<T>): () => Promise<void>;
+  /**
+   * Resets values and selected form state.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#resetvalues-options)
+   */
+  reset(values?: Partial<T>, options?: ResetOptions): void;
+  /**
+   * Resets one field to its current default value and clears its state.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#resetfieldname)
+   */
+  resetField<P extends FieldPath<T>>(name: P, options?: ResetFieldOptions<T, P>): void;
+  /**
+   * Focuses a registered field when its ref points to a focusable element.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#setfocusname)
+   */
+  setFocus(name: FieldPath<T>): void;
+}
+
+export class BaseForm<T extends FieldValues = FieldValues> implements Form<T> {
   /**
    * Current form values.
    *

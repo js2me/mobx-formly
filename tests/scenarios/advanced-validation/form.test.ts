@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('advanced validation scenario', () => {
   it('supports onTouched validation mode', async () => {
-    const form = new Form({ values: { name: '' }, mode: 'onTouched' });
+    const form = new BaseForm({ values: { name: '' }, mode: 'onTouched' });
     const field = form.register('name', { required: 'Required' });
 
     await field.onChange({ target: { value: '' } });
@@ -17,7 +17,7 @@ describe('advanced validation scenario', () => {
 
   it('short-circuits remaining rules in firstError mode after the first failure', async () => {
     const validate = vi.fn(async () => 'Should not run');
-    const form = new Form({ values: { name: '' } });
+    const form = new BaseForm({ values: { name: '' } });
     form.register('name', { required: 'Required', validate });
 
     expect(await form.trigger('name')).toBe(false);
@@ -26,7 +26,7 @@ describe('advanced validation scenario', () => {
   });
 
   it('collects all rule and schema errors with criteriaMode all', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       values: { code: '' },
       criteriaMode: 'all',
       schema: {
@@ -55,7 +55,7 @@ describe('advanced validation scenario', () => {
       return { values: { name: values.name + '!' }, errors: {} };
     });
     const onValid = vi.fn();
-    const form = new Form({ values: { name: 'Ada' }, resolver, context: { suffix: '!' } });
+    const form = new BaseForm({ values: { name: 'Ada' }, resolver, context: { suffix: '!' } });
     form.register('name');
 
     await form.handleSubmit({ onValid })();
@@ -64,7 +64,7 @@ describe('advanced validation scenario', () => {
   });
 
   it('supports Standard Schema validation', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       values: { email: '' },
       schema: {
         '~standard': {
@@ -83,7 +83,7 @@ describe('advanced validation scenario', () => {
   it('delays errors and applies native validity messages', async () => {
     vi.useFakeTimers();
     try {
-      const form = new Form({ values: { name: '' }, mode: 'onChange', delayError: 100, shouldUseNativeValidation: true });
+      const form = new BaseForm({ values: { name: '' }, mode: 'onChange', delayError: 100, shouldUseNativeValidation: true });
       const setCustomValidity = vi.fn();
       const reportValidity = vi.fn();
       const field = form.register('name', { required: 'Required' });

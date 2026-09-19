@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('checkout flow', () => {
   it('focuses the first invalid field, revalidates dependent confirmation, and submits', async () => {
     const focusCard = vi.fn();
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { card: '', confirmCard: '', acceptedTerms: false },
     });
     const card = form.register('card', { deps: 'confirmCard', required: 'Card is required' });

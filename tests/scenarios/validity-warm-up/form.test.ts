@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('validity warm-up scenario', () => {
   it('validates the schema on the first isValid read and flips to false', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { email: '' },
       schema: z.object({ email: z.string().email('Bad email') }),
     });
@@ -17,7 +17,7 @@ describe('validity warm-up scenario', () => {
 
   it('keeps valid defaults valid and still runs the warm-up pass', async () => {
     let runs = 0;
-    const form = new Form<{ email: string }>({
+    const form = new BaseForm<{ email: string }>({
       defaultValues: { email: 'ada@example.test' },
       schema: {
         safeParseAsync: async (value) => {
@@ -36,7 +36,7 @@ describe('validity warm-up scenario', () => {
   });
 
   it('re-warms after reset with new values', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { email: 'ada@example.test' },
       schema: z.object({ email: z.string().email('Bad email') }),
     });
@@ -49,7 +49,7 @@ describe('validity warm-up scenario', () => {
   });
 
   it('leaves rule-only forms optimistic until an actual validation', () => {
-    const form = new Form({ defaultValues: { name: '' } });
+    const form = new BaseForm({ defaultValues: { name: '' } });
     form.register('name', { required: 'Required' });
     expect(form.isValid).toBe(true);
     expect(form.errors).toEqual({});

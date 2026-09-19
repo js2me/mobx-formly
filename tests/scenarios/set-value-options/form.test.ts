@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('setValue options scenario', () => {
   it('applies dirty, touched, and validation flags independently', async () => {
-    const form = new Form({ defaultValues: { count: 0 } });
+    const form = new BaseForm({ defaultValues: { count: 0 } });
     form.register('count', { min: { value: 1, message: 'At least one' } });
 
     form.setValue('count', 1, { shouldDirty: false, shouldTouch: true, shouldValidate: false });

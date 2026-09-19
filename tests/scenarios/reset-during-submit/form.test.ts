@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('reset during submit scenario', () => {
   it('keeps reset state after a successful submit handler', async () => {
-    const form = new Form({ defaultValues: { name: 'Ada' } });
+    const form = new BaseForm({ defaultValues: { name: 'Ada' } });
     const submit = form.handleSubmit({
       onValid: async () => {
         form.reset({ name: 'Fresh' });

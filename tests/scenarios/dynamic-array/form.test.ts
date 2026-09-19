@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('dynamic array scenario', () => {
   it('updates nested items and removes an item without corrupting the array', () => {
-    const form = new Form<{ items: Array<{ name: string }> }>({
+    const form = new BaseForm<{ items: Array<{ name: string }> }>({
       defaultValues: { items: [{ name: 'One' }, { name: 'Two' }] },
     });
     form.register('items.0.name');

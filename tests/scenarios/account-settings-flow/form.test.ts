@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 type AccountValues = {
   profile: { displayName: string; timezone: string };
@@ -8,7 +8,7 @@ type AccountValues = {
 
 describe('account settings flow', () => {
   it('hydrates asynchronously, edits a Map-backed setting, and saves a new baseline', async () => {
-    const form = new Form<AccountValues>({
+    const form = new BaseForm<AccountValues>({
       defaultValues: {
         profile: { displayName: '', timezone: 'UTC' },
         notifications: new Map([

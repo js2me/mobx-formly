@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('array mutation scenario', () => {
   it('rebuilds schema errors against current indexes after structural mutation', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { items: [{ name: 'One' }, { name: 'Two' }, { name: 'Three' }] },
       schema: z.object({ items: z.array(z.object({ name: z.string().min(5, 'Too short') })) }),
     });
@@ -25,7 +25,7 @@ describe('array mutation scenario', () => {
   });
 
   it('rebuilds leaf dirty paths from the complete array after mutation', () => {
-    const form = new Form({ defaultValues: { items: [{ name: 'One' }, { name: 'Two' }] } });
+    const form = new BaseForm({ defaultValues: { items: [{ name: 'One' }, { name: 'Two' }] } });
 
     form.mutate(() => {
       form.values.items.splice(0, 0, { name: 'Fresh' });
@@ -39,7 +39,7 @@ describe('array mutation scenario', () => {
   });
 
   it('keeps touched state path-based across programmatic reorder', () => {
-    const form = new Form({ defaultValues: { items: [{ name: 'One' }, { name: 'Two' }] } });
+    const form = new BaseForm({ defaultValues: { items: [{ name: 'One' }, { name: 'Two' }] } });
     form.setValue('items.1.name', 'Edited', { shouldTouch: true });
 
     form.mutate(() => {

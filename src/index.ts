@@ -1,4 +1,5 @@
-export { Form } from './form.js';
+export { BaseForm } from './form.js';
+export type { Form } from './form.js';
 export { createForm } from './create-form.js';
 export type { InferredFormValues } from './create-form.js';
 export type {

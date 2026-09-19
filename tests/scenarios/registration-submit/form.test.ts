@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('registration and submit scenario', () => {
   it('validates, reports errors, then submits corrected values', async () => {
     const onValid = vi.fn();
     const onInvalid = vi.fn();
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { email: '', age: 0 },
       mode: 'onBlur',
       schema: z.object({ email: z.string().email(), age: z.number().min(18) }),

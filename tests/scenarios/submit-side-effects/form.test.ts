@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('submit side effects scenario', () => {
   it('keeps the successful result when an earlier concurrent request fails', async () => {
     let rejectFirst!: (error: Error) => void;
     let resolveSecond!: () => void;
     let calls = 0;
-    const form = new Form({ values: { name: 'Ada' } });
+    const form = new BaseForm({ values: { name: 'Ada' } });
 
     const submit = form.handleSubmit({
       onValid: () => {
@@ -30,7 +30,7 @@ describe('submit side effects scenario', () => {
 
   it('submits a snapshot and lets the handler update the live form', async () => {
     const received: unknown[] = [];
-    const form = new Form({ values: { status: 'draft' } });
+    const form = new BaseForm({ values: { status: 'draft' } });
 
     await form.handleSubmit({
       onValid: async (values) => {
@@ -44,7 +44,7 @@ describe('submit side effects scenario', () => {
   });
 
   it('keeps reset state when reset is called from the submit handler', async () => {
-    const form = new Form({ defaultValues: { name: 'Ada' } });
+    const form = new BaseForm({ defaultValues: { name: 'Ada' } });
 
     await form.handleSubmit({
       onValid: async () => form.reset({ name: 'Fresh' }),

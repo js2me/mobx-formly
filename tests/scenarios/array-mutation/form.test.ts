@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('array mutation scenario', () => {
   it('tracks and validates a nested field added through direct mutation', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { items: [{ name: 'One' }] },
       schema: z.object({ items: z.array(z.object({ name: z.string().min(3, 'Name is too short') })) }),
     });
@@ -22,7 +22,7 @@ describe('array mutation scenario', () => {
   });
 
   it('clears errors after removing and revalidating an array item', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       values: { items: [{ name: '' }, { name: 'Two' }] },
       schema: z.object({ items: z.array(z.object({ name: z.string().min(1, 'Name is required') })) }),
     });

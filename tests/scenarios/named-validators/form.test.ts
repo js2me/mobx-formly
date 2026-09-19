@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('named validators scenario', () => {
   it('collects named validator failures in criteriaMode all', async () => {
-    const form = new Form({ defaultValues: { name: 'XY' }, criteriaMode: 'all' });
+    const form = new BaseForm({ defaultValues: { name: 'XY' }, criteriaMode: 'all' });
     form.register('name', {
       validate: {
         short: (value) => String(value).length > 3 || 'Too short',
@@ -17,7 +17,7 @@ describe('named validators scenario', () => {
   });
 
   it('short-circuits to the first named failure in firstError mode', async () => {
-    const form = new Form({ defaultValues: { name: 'XY' } });
+    const form = new BaseForm({ defaultValues: { name: 'XY' } });
     form.register('name', {
       validate: {
         short: (value) => String(value).length > 3 || 'Too short',
@@ -30,7 +30,7 @@ describe('named validators scenario', () => {
   });
 
   it('supports message arrays from a single validator', async () => {
-    const form = new Form({ defaultValues: { name: 'XY' }, criteriaMode: 'all' });
+    const form = new BaseForm({ defaultValues: { name: 'XY' }, criteriaMode: 'all' });
     form.register('name', {
       validate: {
         chars: (value) => {
@@ -48,7 +48,7 @@ describe('named validators scenario', () => {
   });
 
   it('keeps a single validate function working alongside built-in rules', async () => {
-    const form = new Form({ defaultValues: { name: 'ab' } });
+    const form = new BaseForm({ defaultValues: { name: 'ab' } });
     form.register('name', { validate: (value) => String(value).length > 2 || 'Too short' });
 
     expect(await form.trigger('name')).toBe(false);

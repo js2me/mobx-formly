@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('array index lifecycle scenario', () => {
   it('keeps registered metadata path-based after reorder', () => {
-    const form = new Form<{ items: Array<{ name: string }> }>({ defaultValues: { items: [{ name: 'One' }, { name: 'Two' }] } });
+    const form = new BaseForm<{ items: Array<{ name: string }> }>({ defaultValues: { items: [{ name: 'One' }, { name: 'Two' }] } });
     form.register('items.0.name');
     form.register('items.1.name');
     form.setValue('items.0.name', 'Changed', { shouldTouch: true });
@@ -17,7 +17,7 @@ describe('array index lifecycle scenario', () => {
   });
 
   it('cleans metadata when the registered index is explicitly unregistered', () => {
-    const form = new Form<{ items: Array<{ name: string }> }>({ defaultValues: { items: [{ name: 'One' }] } });
+    const form = new BaseForm<{ items: Array<{ name: string }> }>({ defaultValues: { items: [{ name: 'One' }] } });
     form.register('items.0.name');
     form.setError('items.0.name', { type: 'manual' });
     form.setValue('items.0.name', 'Changed', { shouldTouch: true });

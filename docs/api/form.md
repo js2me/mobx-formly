@@ -2,7 +2,7 @@
 
 ## Constructor options
 
-The Form constructor accepts default values, initial values, an optional schema or
+The `createForm()` factory (backed by the `BaseForm` class) accepts default values, initial values, an optional schema or
 resolver, validation modes, error aggregation settings, and a disabled flag. Mode
 defaults to onSubmit, reValidateMode to onChange, criteriaMode to firstError, and
 disabled to false. Initial values populate the current form; default values are used

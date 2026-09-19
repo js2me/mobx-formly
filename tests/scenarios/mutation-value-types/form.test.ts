@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('mutation value types scenario', () => {
   it('marks every supported top-level value shape dirty through mutate', () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: {
         text: 'before',
         count: 1,
@@ -56,7 +56,7 @@ describe('mutation value types scenario', () => {
   });
 
   it('tracks direct nested ObservableMap values through their dot path', () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: { settings: new Map([['primary', { enabled: true }]]) },
     });
 
@@ -68,7 +68,7 @@ describe('mutation value types scenario', () => {
   });
 
   it('tracks deeply nested objects, Maps, and Sets through their complete paths', () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: {
         account: {
           profile: {
@@ -91,7 +91,7 @@ describe('mutation value types scenario', () => {
   });
 
   it('rebuilds error paths for an array nested inside a Map through full validation', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: {
         settings: new Map([['group', { items: [{ name: 'One' }, { name: 'Two' }] }]]),
       },
@@ -118,7 +118,7 @@ describe('mutation value types scenario', () => {
   });
 
   it('does not mark unchanged Map and Set values dirty', () => {
-    const form = new Form({
+    const form = new BaseForm({
       defaultValues: {
         settings: new Map([['theme', 'light']]),
         tags: new Set(['one']),

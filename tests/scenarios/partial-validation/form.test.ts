@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('partial validation scenario', () => {
   it('validates only the requested fields while preserving unrelated errors', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       values: { email: '', password: '' },
       schema: z.object({
         email: z.string().email('Email is invalid'),
@@ -30,7 +30,7 @@ describe('partial validation scenario', () => {
   });
 
   it('reports root schema issues when there are no field paths', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       values: { password: 'secret', confirmation: 'different' },
       schema: z.object({ password: z.string(), confirmation: z.string() }).refine(
         (value) => value.password === value.confirmation,

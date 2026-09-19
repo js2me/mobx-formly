@@ -1,7 +1,7 @@
 import { arch, cpus, platform, totalmem } from 'node:os';
 import { autorun } from 'mobx';
 import { describe, expect, it } from 'vitest';
-import { Form } from '../../src/index.js';
+import { BaseForm } from '../../src/index.js';
 
 /**
  * Two layers of portable performance regression tests.
@@ -59,7 +59,7 @@ const referencePerOp = measureMin(() => {
 });
 
 const runDeterministicCase = (fieldCount: number) => {
-  const form = new Form<Record<string, number>>({
+  const form = new BaseForm<Record<string, number>>({
     defaultValues: Object.fromEntries(Array.from({ length: fieldCount }, (_, index) => [`field${index}`, 0])),
   });
 
@@ -108,7 +108,7 @@ describe('deterministic performance regressions', () => {
 
   it('registers a large form without creating duplicate field resources', () => {
     const fieldCount = 2048;
-    const form = new Form<Record<string, string>>({ defaultValues: createFields(fieldCount) });
+    const form = new BaseForm<Record<string, string>>({ defaultValues: createFields(fieldCount) });
 
     for (let index = 0; index < fieldCount; index += 1) form.register(`field${index}`);
     for (let index = 0; index < fieldCount; index += 1) form.register(`field${index}`);
@@ -118,7 +118,7 @@ describe('deterministic performance regressions', () => {
   });
 
   it('keeps an isolated update isolated from unrelated field observers', () => {
-    const form = new Form<Record<string, string>>({ defaultValues: createFields(512) });
+    const form = new BaseForm<Record<string, string>>({ defaultValues: createFields(512) });
     for (let index = 0; index < 512; index += 1) form.register(`field${index}`);
 
     let firstFieldReactions = 0;
@@ -136,7 +136,7 @@ describe('deterministic performance regressions', () => {
 
   it('batches nested object and array changes into one reaction', () => {
     type Values = { profile: { name: string; tags: string[] } };
-    const form = new Form<Values>({ defaultValues: { profile: { name: '', tags: [] } } });
+    const form = new BaseForm<Values>({ defaultValues: { profile: { name: '', tags: [] } } });
     form.register('profile.name');
     form.register('profile.tags');
     let reactions = 0;
@@ -158,7 +158,7 @@ describe('deterministic performance regressions', () => {
 
   it('validates a large fixed workload with stable results', async () => {
     const fieldCount = 512;
-    const form = new Form<Record<string, string>>({ values: createFields(fieldCount) });
+    const form = new BaseForm<Record<string, string>>({ values: createFields(fieldCount) });
     for (let index = 0; index < fieldCount; index += 1) {
       form.register(`field${index}`, { required: 'Required', minLength: { value: 3, message: 'Too short' } });
     }
@@ -172,7 +172,7 @@ describe('deterministic performance regressions', () => {
   it('settles a fixed async validation workload deterministically', async () => {
     const fieldCount = 64;
     let validations = 0;
-    const form = new Form<Record<string, string>>({ values: createFields(fieldCount, 'ok') });
+    const form = new BaseForm<Record<string, string>>({ values: createFields(fieldCount, 'ok') });
     for (let index = 0; index < fieldCount; index += 1) {
       form.register(`field${index}`, {
         validate: async (value) => {
@@ -191,7 +191,7 @@ describe('deterministic performance regressions', () => {
 
   it('resets a large mutated form to a stable baseline', () => {
     const fieldCount = 512;
-    const form = new Form<Record<string, string>>({ defaultValues: createFields(fieldCount, 'default') });
+    const form = new BaseForm<Record<string, string>>({ defaultValues: createFields(fieldCount, 'default') });
     for (let index = 0; index < fieldCount; index += 1) form.register(`field${index}`);
     form.mutate(() => {
       for (let index = 0; index < fieldCount; index += 1) form.setValue(`field${index}`, `next-${index}`);
@@ -205,7 +205,7 @@ describe('deterministic performance regressions', () => {
 
   it('handles dynamic array lifecycle without retaining unregistered fields', () => {
     type Values = { rows: Array<{ name: string }> };
-    const form = new Form<Values>({ defaultValues: { rows: [] } });
+    const form = new BaseForm<Values>({ defaultValues: { rows: [] } });
 
     for (let index = 0; index < 128; index += 1) {
       form.mutate(() => form.values.rows.push({ name: `row-${index}` }), { shouldValidate: false });
@@ -218,7 +218,7 @@ describe('deterministic performance regressions', () => {
   });
 
   it('cleans all tracked resources after repeated register/unregister cycles', () => {
-    const form = new Form<Record<string, string>>({ defaultValues: createFields(64) });
+    const form = new BaseForm<Record<string, string>>({ defaultValues: createFields(64) });
 
     for (let cycle = 0; cycle < 8; cycle += 1) {
       for (let index = 0; index < 64; index += 1) form.register(`field${index}`);
@@ -256,13 +256,13 @@ describe('portable timing budgets', () => {
 
   it('keeps registration within a portable budget', async () => {
     await expectWithinBudget('register', fieldCount, 200_000, () => {
-      const form = new Form<Record<string, string>>({ defaultValues: values });
+      const form = new BaseForm<Record<string, string>>({ defaultValues: values });
       for (const name of names) form.register(name);
     });
   });
 
   it('keeps individual updates within a portable budget', async () => {
-    const form = new Form<Record<string, string>>({ defaultValues: values });
+    const form = new BaseForm<Record<string, string>>({ defaultValues: values });
     await expectWithinBudget('setValue', fieldCount, 60_000, () => {
       for (let index = 0; index < fieldCount; index += 1) {
         form.setValue(`field${index}`, `value${index}`, { shouldValidate: false });
@@ -271,7 +271,7 @@ describe('portable timing budgets', () => {
   });
 
   it('keeps batched updates within a portable budget', async () => {
-    const form = new Form<Record<string, string>>({ defaultValues: values });
+    const form = new BaseForm<Record<string, string>>({ defaultValues: values });
     await expectWithinBudget('mutate', fieldCount, 20_000, () => {
       form.mutate(() => {
         for (let index = 0; index < fieldCount; index += 1) {
@@ -282,7 +282,7 @@ describe('portable timing budgets', () => {
   });
 
   it('keeps full validation within portable budgets', async () => {
-    const form = new Form<Record<string, string>>({ defaultValues: values });
+    const form = new BaseForm<Record<string, string>>({ defaultValues: values });
     for (const name of names) form.register(name, { required: 'Required', minLength: { value: 2, message: 'Too short' } });
 
     await expectWithinBudget('trigger invalid', fieldCount, 80_000, async () => {
@@ -297,7 +297,7 @@ describe('portable timing budgets', () => {
   });
 
   it('keeps one-field change validation within a portable budget', async () => {
-    const form = new Form({ defaultValues: { name: '' }, mode: 'onChange' });
+    const form = new BaseForm({ defaultValues: { name: '' }, mode: 'onChange' });
     const field = form.register('name', { required: 'Required' });
     await expectWithinBudget('single field onChange', 1, 250_000, async () => {
       await field.onChange({ target: { value: '' } });
@@ -305,7 +305,7 @@ describe('portable timing budgets', () => {
   });
 
   it('keeps proxy reads and snapshots within portable budgets', async () => {
-    const form = new Form<Record<string, string>>({ defaultValues: values });
+    const form = new BaseForm<Record<string, string>>({ defaultValues: values });
     for (const name of names) form.register(name);
 
     await expectWithinBudget('fieldState reads', fieldCount, 3_000, () => {
@@ -326,7 +326,7 @@ describe('portable timing budgets', () => {
   });
 
   it('keeps reset within a portable budget', async () => {
-    const form = new Form<Record<string, string>>({ defaultValues: values });
+    const form = new BaseForm<Record<string, string>>({ defaultValues: values });
     for (const name of names) form.register(name);
     await expectWithinBudget('reset', fieldCount, 45_000, () => form.reset(values));
   });

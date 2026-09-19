@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('multi-step form scenario', () => {
   it('keeps values and field metadata while moving between steps', async () => {
-    const form = new Form({ defaultValues: { name: '', address: '' } });
+    const form = new BaseForm({ defaultValues: { name: '', address: '' } });
     const name = form.register('name', { required: 'Name required' });
     const address = form.register('address', { required: 'Address required' });
 

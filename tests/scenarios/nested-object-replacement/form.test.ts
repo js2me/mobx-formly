@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { autorun } from 'mobx';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('nested object replacement scenario', () => {
   it('observes the replacement and observes the new nested object afterwards', () => {
-    const form = new Form<{ profile: { email: string; name: string } }>({
+    const form = new BaseForm<{ profile: { email: string; name: string } }>({
       defaultValues: { profile: { email: 'old@example.com', name: 'Ada' } },
     });
     const observed: string[] = [];
@@ -23,7 +23,7 @@ describe('nested object replacement scenario', () => {
   });
 
   it('does not keep reacting to the replaced object', () => {
-    const form = new Form<{ profile: { email: string } }>({
+    const form = new BaseForm<{ profile: { email: string } }>({
       defaultValues: { profile: { email: 'old@example.com' } },
     });
     const oldProfile = form.values.profile;

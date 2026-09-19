@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('reset scenario', () => {
   it('resets during an invalid submit and supports selective preservation', async () => {
-    const form = new Form({ defaultValues: { email: '' } });
+    const form = new BaseForm({ defaultValues: { email: '' } });
     form.register('email', { required: 'Required' });
     await form.handleSubmit({ onValid: async () => undefined, onInvalid: async () => undefined })();
     form.setValue('email', 'ada@example.com', { shouldTouch: true });

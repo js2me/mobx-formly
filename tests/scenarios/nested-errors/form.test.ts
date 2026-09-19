@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('nested error precedence scenario', () => {
   it('clears one nested error without affecting sibling errors', async () => {
-    const form = new Form({
+    const form = new BaseForm({
       values: { profile: { email: '', name: '' } },
       schema: z.object({ profile: z.object({ email: z.string().email(), name: z.string().min(2) }) }),
     });

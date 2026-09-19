@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Form } from '../../../src/index.js';
+import { BaseForm } from '../../../src/index.js';
 
 describe('form controls scenario', () => {
   it('supports resetField keep options and a replacement default value', () => {
-    const form = new Form({ defaultValues: { name: 'Ada' } });
+    const form = new BaseForm({ defaultValues: { name: 'Ada' } });
     form.register('name');
     form.setValue('name', 'Grace');
     form.setError('name', { type: 'server', message: 'Taken' });
@@ -25,7 +25,7 @@ describe('form controls scenario', () => {
 
   it('can touch and focus fields through trigger options', async () => {
     const focus = vi.fn();
-    const form = new Form({ defaultValues: { email: '' } });
+    const form = new BaseForm({ defaultValues: { email: '' } });
     const registration = form.register('email', { required: 'Required' });
     registration.ref.current = { focus } as unknown as HTMLElement;
 
@@ -37,8 +37,8 @@ describe('form controls scenario', () => {
   it('focuses the first field error after an invalid submit unless disabled', async () => {
     const focused = vi.fn();
     const focusedDisabled = vi.fn();
-    const enabled = new Form({ defaultValues: { email: '' } });
-    const disabled = new Form({ defaultValues: { email: '' }, shouldFocusError: false });
+    const enabled = new BaseForm({ defaultValues: { email: '' } });
+    const disabled = new BaseForm({ defaultValues: { email: '' }, shouldFocusError: false });
     enabled.register('email', { required: 'Required' }).ref.current = { focus: focused } as unknown as HTMLElement;
     disabled.register('email', { required: 'Required' }).ref.current = { focus: focusedDisabled } as unknown as HTMLElement;
 
@@ -51,7 +51,7 @@ describe('form controls scenario', () => {
 
   it('exposes aggregate isValidating while validation is pending', async () => {
     let resolve!: (result: { success: true; data: { name: string } }) => void;
-    const form = new Form<{ name: string }>({
+    const form = new BaseForm<{ name: string }>({
       defaultValues: { name: '' },
       schema: { safeParseAsync: () => new Promise((done) => { resolve = done; }) },
     });
@@ -65,7 +65,7 @@ describe('form controls scenario', () => {
   });
 
   it('stores and clears typed root error namespaces', () => {
-    const form = new Form<{ email: string }>({ defaultValues: { email: '' } });
+    const form = new BaseForm<{ email: string }>({ defaultValues: { email: '' } });
     form.setError('root.server', { type: 'server', message: 'Try again' });
     form.setError('root.network', { type: 'network', message: 'Retry later' });
 
@@ -79,7 +79,7 @@ describe('form controls scenario', () => {
   });
 
   it('supports Map field paths in setValue and resetField', () => {
-    const form = new Form<{ settings: Map<'primary', { enabled: boolean }> }>({
+    const form = new BaseForm<{ settings: Map<'primary', { enabled: boolean }> }>({
       defaultValues: { settings: new Map([['primary', { enabled: true }]]) },
     });
 
@@ -93,7 +93,7 @@ describe('form controls scenario', () => {
   });
 
   it('reconciles async mutate after its callback resolves', async () => {
-    const form = new Form({ defaultValues: { name: '' } });
+    const form = new BaseForm({ defaultValues: { name: '' } });
 
     await form.mutate(async () => {
       await Promise.resolve();
@@ -105,7 +105,7 @@ describe('form controls scenario', () => {
   });
 
   it('reconciles writes made before an async mutate rejects', async () => {
-    const form = new Form({ defaultValues: { name: '' } });
+    const form = new BaseForm({ defaultValues: { name: '' } });
 
     await expect(form.mutate(async () => {
       form.values.name = 'Ada';

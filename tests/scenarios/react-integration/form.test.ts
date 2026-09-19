@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Form } from '../../../src/index.js';
+import { BaseForm, type Form } from '../../../src/index.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -54,7 +54,7 @@ const ZodEmailForm = observer(({ form, onValid }: { form: Form<Values>; onValid:
 
 describe('React integration scenario', () => {
   it('binds a MobX-reactive input, stable form ref, handlers, and submit lifecycle', async () => {
-    const form = new Form<Values>({ defaultValues: { email: '' } });
+    const form = new BaseForm<Values>({ defaultValues: { email: '' } });
     const onValid = vi.fn();
     const focus = vi.fn();
     const node = { focus } as unknown as HTMLElement;
@@ -92,7 +92,7 @@ describe('React integration scenario', () => {
   });
 
   it('renders Zod validation errors reactively and submits valid values', async () => {
-    const form = new Form<Values>({
+    const form = new BaseForm<Values>({
       defaultValues: { email: '' },
       mode: 'onChange',
       schema: z.object({ email: z.string().email('Enter a valid email') }),
