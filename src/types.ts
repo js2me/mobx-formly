@@ -84,8 +84,17 @@ export type FieldPathValue<T, P extends string> =
 export interface FieldError {
   type: string;
   message?: string;
-  types?: Record<string, string | true>;
+  types?: Record<string, string | true | string[]>;
 }
+
+/** Result of a single field validator: pass, one message, or several messages. */
+export type ValidateResult = boolean | string | string[] | undefined;
+
+/** Checks a field value against the rest of the form values. */
+export type FieldValidate<TValue = unknown, TValues extends FieldValues = FieldValues> = (
+  value: TValue,
+  values: TValues,
+) => ValidateResult | Promise<ValidateResult>;
 
 export type FieldErrors<T extends object = FieldValues> = {
   [K in keyof T]?: T[K] extends readonly (infer I)[]
@@ -134,7 +143,9 @@ export interface RegisterOptions<T extends FieldValues = FieldValues> {
   min?: { value: number; message?: string };
   max?: { value: number; message?: string };
   pattern?: { value: RegExp; message?: string };
-  validate?: (value: unknown, values: T) => boolean | string | Promise<boolean | string>;
+  validate?: FieldValidate<unknown, T> | Record<string, FieldValidate<unknown, T>>;
+  /** Field paths re-validated whenever this field changes. */
+  deps?: FieldPath<T> | FieldPath<T>[];
   valueAsNumber?: boolean;
   valueAsDate?: boolean;
   setValueAs?: (value: unknown) => unknown;
@@ -175,7 +186,8 @@ export interface FormOptions<T extends FieldValues> {
   defaultValues?: Partial<T>;
   values?: Partial<T>;
   schema?: FormSchema<T>;
-  resolver?: Resolver<T>;
+  /** A resolver may submit transformed values, so its output type is not tied to the field values type. */
+  resolver?: Resolver<T, any>;
   context?: unknown;
   mode?: 'onSubmit' | 'onChange' | 'onBlur' | 'onTouched' | 'all';
   reValidateMode?: 'onChange' | 'onBlur';

@@ -5,9 +5,8 @@ import type {
   RegisterOptions, RegisterReturn, ResetOptions, SetErrorConfig, SetValueConfig, SubmitHandlers,
 } from './types.js';
 import { clone, deleteAtPath, extractValue, getAtPath, isEqual, setAtPath } from './utils.js';
-import { collectErrorPaths, findErrorAtPath } from './utils.js';
+import { collectChangedPaths, collectDirtyPaths, collectErrorPaths, findErrorAtPath } from './utils.js';
 import { PathStore } from './path-store.js';
-import { MutationTracker } from './mutation-tracker.js';
 import { FormValidator } from './validation.js';
 
 export class Form<T extends FieldValues = FieldValues> {
@@ -92,13 +91,14 @@ export class Form<T extends FieldValues = FieldValues> {
   private readonly options: Required<Pick<FormOptions<T>, 'mode' | 'reValidateMode' | 'disabled'>> & FormOptions<T>;
   private readonly fieldOptions = new Map<string, RegisterOptions<T>>();
   private readonly touchedValidationFields = new Set<string>();
-  private readonly tracker: MutationTracker<T>;
   private readonly validator: FormValidator<T>;
   private activeSubmissions = 0;
   private resetVersion = 0;
   private readonly isValidOverride = observable.box<boolean | undefined>(undefined);
   private validationVersion = 0;
   private readonly fieldValidationVersions = new Map<string, number>();
+  /** Whether at least one validation pass has completed since construction or reset. */
+  private hasValidationRun = false;
 
   /** Creates a form with optional initial values, schema, and validation settings.
    *
@@ -114,7 +114,6 @@ export class Form<T extends FieldValues = FieldValues> {
     };
     this.defaultValues = clone((options.defaultValues ?? {}) as T);
     this.values = clone((options.values ?? options.defaultValues ?? {}) as T);
-    this.tracker = new MutationTracker<T>(() => this.values);
     this.validator = new FormValidator<T>({
       options: this.options,
       fieldOptions: this.fieldOptions,
@@ -174,12 +173,22 @@ export class Form<T extends FieldValues = FieldValues> {
   get isTouched(): boolean { return Object.keys(this.touchedFields).length > 0; }
 
   /**
-   * Whether the form has no errors. Frozen by `reset` with `keepIsValid`
-   * until the next error or validation update.
+   * Whether the form has no errors. With a schema or resolver the first read
+   * schedules a full validation pass, so validity reflects the schema instead
+   * of defaulting to true until something validates.
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#isvalid)
    */
-  get isValid(): boolean { return this.isValidOverride.get() ?? this.errorStore.size === 0; }
+  get isValid(): boolean {
+    const override = this.isValidOverride.get();
+    if (override !== undefined) return override;
+    if (!this.hasValidationRun && (this.options.schema || this.options.resolver)) {
+      this.hasValidationRun = true;
+      // Deferred so this computed getter stays free of observable side effects.
+      queueMicrotask(() => { void this.runValidation(); });
+    }
+    return this.errorStore.size === 0;
+  }
 
   /**
    * Registers a field and returns its ref and event handlers.
@@ -202,8 +211,15 @@ export class Form<T extends FieldValues = FieldValues> {
         if (this.disabled) return;
         const value = this.transformValue(extractValue(eventOrValue), options);
         const shouldValidate = this.shouldValidateOnChange(path);
+        const deps = this.dependentFields(options.deps);
         this.setValue(path, value as FieldPathValue<T, typeof path>, { shouldDirty: true, shouldValidate: false });
-        if (shouldValidate) await this.trigger(path);
+        if (shouldValidate && deps.length) {
+          await Promise.all([this.trigger(path), this.trigger(deps as FieldPath<T>[])]);
+        } else if (shouldValidate) {
+          await this.trigger(path);
+        } else if (deps.length) {
+          await this.trigger(deps as FieldPath<T>[]);
+        }
       },
       onBlur: async () => {
         if (this.disabled) return;
@@ -249,21 +265,25 @@ export class Form<T extends FieldValues = FieldValues> {
   }
 
   /**
-   * Groups direct value changes and processes their changed paths together.
+   * Groups direct value changes, reconciles all dirty paths, and optionally
+   * validates the complete form.
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#mutatemutator-config)
    */
   mutate(mutator: () => void, config: SetValueConfig = {}): void {
-    const paths = this.tracker.track(mutator);
-    for (const path of paths) this.applyValueChange(path, { ...config, shouldValidate: false });
-    if (paths.length && (config.shouldValidate ?? true)) {
-      void this.trigger(paths as FieldPath<T>[]);
-    }
+    const before = clone(this.values);
+    mutator();
+    if (isEqual(before, this.values)) return;
+    const changedPaths = collectChangedPaths(before, this.values);
+    const dirtyPaths = collectDirtyPaths(this.values, this.defaultValues);
+    if (config.shouldDirty ?? true) this.syncDirtyFields(dirtyPaths);
+    if (config.shouldTouch ?? true) for (const path of changedPaths) this.markTouched(path);
+    if (config.shouldValidate ?? true) void this.trigger();
   }
 
   private applyValueChange(path: string, config: SetValueConfig): void {
     if (config.shouldDirty ?? true) this.updateDirty(path);
-    if (config.shouldTouch) this.markTouched(path);
+    if (config.shouldTouch ?? true) this.markTouched(path);
     if (config.shouldValidate) void this.trigger(path as FieldPath<T>);
   }
 
@@ -308,6 +328,7 @@ export class Form<T extends FieldValues = FieldValues> {
   }
 
   private async runValidation(name?: FieldPath<T> | FieldPath<T>[]): Promise<{ valid: boolean; values?: T }> {
+    this.hasValidationRun = true;
     const paths = name ? (Array.isArray(name) ? name : [name]).map(String) : undefined;
     const run = ++this.validationVersion;
     const fieldVersions = new Map<string, number>();
@@ -390,7 +411,6 @@ export class Form<T extends FieldValues = FieldValues> {
   reset(values?: Partial<T>, options: ResetOptions = {}): void {
     this.validator.cancelAllDelayed();
     this.touchedValidationFields.clear();
-    this.tracker.dispose();
     this.resetVersion += 1;
     this.validationVersion += 1;
     if (!options.keepIsValidating) {
@@ -409,11 +429,14 @@ export class Form<T extends FieldValues = FieldValues> {
         }
       }
       this.values = next;
+      // New values need a fresh validity check on the next isValid read.
+      this.hasValidationRun = false;
     }
     if (!options.keepDefaultValues && values) Object.assign(this.defaultValues, clone(values));
     if (!options.keepDirty && !options.keepDirtyValues) this.dirtyFields = {};
     if (!options.keepTouched) this.touchedFields = {};
-    const wasValid = this.isValid;
+    // Raw validity without the lazy warm-up: reset must never schedule validation.
+    const wasValid = this.isValidOverride.get() ?? this.errorStore.size === 0;
     if (!options.keepErrors) {
       this.errorStore.clear();
       for (const [, state] of this.fieldStateStore.entries()) this.applyFieldState(state, undefined);
@@ -461,6 +484,20 @@ export class Form<T extends FieldValues = FieldValues> {
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#snapshot)
    */
   get snapshot(): T { return clone(this.values); }
+
+  /** Reconciles dirty paths against the complete current value tree. */
+  private syncDirtyFields(paths: string[]): void {
+    const dirty = new Set(paths);
+    this.dirtyFields = Object.fromEntries(paths.map((path) => [path, true]));
+    for (const [path, state] of this.fieldStateStore.entries()) state.isDirty = dirty.has(path);
+    for (const path of paths) this.ensureFieldState(path).isDirty = true;
+  }
+
+  private dependentFields(deps: RegisterOptions<T>['deps']): string[] {
+    if (!deps) return [];
+    return (Array.isArray(deps) ? deps : [deps]).map(String);
+  }
+
   private markTouched(path: string): void {
     this.touchedFields[path] = true;
     this.ensureFieldState(path).isTouched = true;

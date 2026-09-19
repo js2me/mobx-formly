@@ -473,7 +473,7 @@ describe('Form', () => {
     expect(form.fieldState.items?.[0]?.name?.isDirty).toBe(true);
   });
 
-  it('tracks multiple direct mutations through mutate', async () => {
+  it('reconciles multiple direct mutations through mutate', async () => {
     const form = new Form({
       defaultValues: { items: [{ name: 'One' }], count: 0 },
       schema: z.object({ items: z.array(z.object({ name: z.string() })), count: z.number().min(1, 'Count is required') }),
@@ -483,7 +483,7 @@ describe('Form', () => {
       form.values.count = 1;
     });
 
-    expect(form.dirtyFields.items).toBe(true);
+    expect(form.dirtyFields['items.1.name']).toBe(true);
     expect(form.dirtyFields.count).toBe(true);
     await vi.waitFor(() => expect(form.errors.count).toBeUndefined());
   });
@@ -524,20 +524,38 @@ describe('Form', () => {
     await vi.waitFor(() => expect(form.errors.count?.message).toBe('Count is too small'));
   });
 
-  it('cleans up cached mutate observers after inactivity', () => {
-    vi.useFakeTimers();
-    try {
-      const form = new Form({ defaultValues: { count: 0 } });
+  it('marks only paths changed by mutate as touched by default', () => {
+    const form = new Form({ defaultValues: { existing: '', changed: '' } });
+    form.setValue('existing', 'already dirty', { shouldTouch: false });
 
-      form.mutate(() => { form.values.count = 1; });
-      expect((form as unknown as { tracker: { observers?: unknown[] } }).tracker.observers?.length).toBeGreaterThan(0);
+    form.mutate(() => {
+      form.values.changed = 'new value';
+    }, { shouldValidate: false });
 
-      vi.advanceTimersByTime(10 * 60 * 1000);
+    expect(form.touchedFields.existing).toBeUndefined();
+    expect(form.touchedFields.changed).toBe(true);
+    expect(form.fieldState.changed?.isTouched).toBe(true);
+  });
 
-      expect((form as unknown as { tracker: { observers?: unknown[] } }).tracker.observers).toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
+  it('allows mutate touch tracking to be disabled explicitly', () => {
+    const form = new Form({ defaultValues: { name: '' } });
+
+    form.mutate(() => {
+      form.values.name = 'Ada';
+    }, { shouldTouch: false, shouldValidate: false });
+
+    expect(form.touchedFields.name).toBeUndefined();
+  });
+
+  it('marks setValue fields as touched by default and respects explicit opt-out', () => {
+    const form = new Form({ defaultValues: { first: '', second: '' } });
+
+    form.setValue('first', 'Ada');
+    form.setValue('second', 'Lin', { shouldTouch: false });
+
+    expect(form.touchedFields.first).toBe(true);
+    expect(form.fieldState.first?.isTouched).toBe(true);
+    expect(form.touchedFields.second).toBeUndefined();
   });
 
   it('runs complex asynchronous schema refinements and maps every issue', async () => {

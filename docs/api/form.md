@@ -24,7 +24,7 @@ Additional validation options are `context`, `delayError`, and
 | `touchedFields` | Touched field paths. |
 | `isDirty` | Computed aggregate dirty flag. |
 | `isTouched` | Computed aggregate touched flag. |
-| `isValid` | Computed aggregate validity flag. |
+| `isValid` | Computed aggregate validity flag. With a schema or resolver the first read schedules a full validation pass, so the flag reflects the schema instead of defaulting to true until something validates. |
 | `isSubmitting` | Whether a submit handler is running. |
 | `isSubmitted` | Whether submit has been attempted. |
 | `isSubmitSuccessful` | Whether the latest submit succeeded. |
@@ -39,11 +39,11 @@ Additional validation options are `context`, `delayError`, and
 | `register(name, options?)` | Returns `name`, `ref`, `onChange`, and `onBlur`. |
 | `unregister(name)` | Removes a field and its state. |
 | `setValue(name, value, config?)` | Updates a value and optionally marks or validates it. |
-| `mutate(mutator, config?)` | Groups several value changes into one form update and can mark or validate the changed paths. |
+| `mutate(mutator, config?)` | Groups several value changes into one form update, rebuilds dirty paths from the complete value tree, and can validate the complete form. |
 | `setError(name, error, config?)` | Sets a field error. `config.shouldFocus` focuses the field ref. |
 | `clearErrors(name?)` | Clears one, many, or all errors. |
 | `trigger(name?)` | Runs schema and rule validation. |
-| `handleSubmit(handlers)` | Returns an async submit function. Validates before calling `onValid` or `onInvalid`. |
+| `handleSubmit(handlers)` | Returns an async submit function. Validates before calling `onValid` or `onInvalid`. `onValid` receives schema or resolver output values, so schema transforms and coercions reach the submit handler. |
 | `reset(values?, options?)` | Resets values and selected form state. Passed values become defaults unless `keepDefaultValues` is true. |
 | `resetField(name)` | Resets one field to its default. |
 | `setFocus(name)` | Focuses the field ref when available. |
@@ -70,14 +70,16 @@ Supported registration options:
 | `minLength`, `maxLength` | Length limit with optional message. |
 | `min`, `max` | Numeric limit with optional message. |
 | `pattern` | Regular expression with optional message. |
-| `validate` | Sync or async custom validator receiving `(value, values)`. |
+| `validate` | Sync or async custom validator receiving `(value, values)`, or a record of named validators whose keys become error types. A validator may return an array of messages. |
+| `deps` | One or several field paths re-validated whenever this field changes. |
 | `valueAsNumber`, `valueAsDate` | Convert event values before storing them. |
 | `setValueAs` | Custom value transformation. |
 
 ## `setValue(name, value, config?)`
 
-`config` supports `shouldDirty`, `shouldTouch`, and `shouldValidate`. Dirty tracking is
-enabled by default for `setValue`; touching and validation are opt-in.
+`config` supports `shouldDirty`, `shouldTouch`, and `shouldValidate`. Dirty tracking and
+touching are enabled by default for `setValue`; validation is opt-in. Pass
+`{ shouldTouch: false }` for a technical update that must leave touched state unchanged.
 
 ## `reset(values?, options?)`
 
@@ -91,3 +93,31 @@ error or validation update, and `keepIsValidating` keeps the `validatingFields` 
 is still discarded by reset.
 `resetField(name)` resets one field to its current default value and clears its
 field state.
+
+## Array fields
+
+Use normal MobX mutations inside `mutate`:
+
+```ts
+form.mutate(() => {
+  form.values.items.splice(1, 1);
+  form.values.items.push({ name: 'New item' });
+});
+```
+
+`mutate` compares the complete current value tree with `defaultValues` after the
+callback and rebuilds `dirtyFields`. Plain objects and arrays are compared
+recursively; `Map` values with string keys are also compared recursively; `Set`,
+`Date`, and `RegExp` are atomic values. By default it then validates the complete
+form, so errors reflect current array indexes instead of being remapped by item
+identity. Pass `{ shouldValidate: false }` to defer that validation.
+
+`touchedFields` remains path-based across programmatic mutations. `Date` and
+`RegExp` must be replaced rather than mutated internally because MobX does not
+observe their internal state. Functions and symbols are not supported as form
+values because they cannot be cloned reliably.
+
+`mutate` marks only paths that changed between the snapshots before and after its
+callback as touched by default. Pass `{ shouldTouch: false }` to opt out. This is
+a programmatic touch policy, not a substitute for the user-interaction touch
+state set by registered `onBlur` handlers.

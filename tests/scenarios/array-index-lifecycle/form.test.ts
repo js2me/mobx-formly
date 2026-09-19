@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Form } from '../../../src/index.js';
 
 describe('array index lifecycle scenario', () => {
-  it('keeps values valid while registered metadata remains path keyed after reorder', () => {
+  it('keeps registered metadata path-based after reorder', () => {
     const form = new Form<{ items: Array<{ name: string }> }>({ defaultValues: { items: [{ name: 'One' }, { name: 'Two' }] } });
     form.register('items.0.name');
     form.register('items.1.name');

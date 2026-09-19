@@ -151,7 +151,7 @@ describe('deterministic performance regressions', () => {
       .toEqual({
         reactions: 2,
         values: { profile: { name: 'Ada', tags: ['typescript', 'mobx'] } },
-        dirty: ['profile.name', 'profile.tags'],
+        dirty: ['profile.name', 'profile.tags.0', 'profile.tags.1'],
       });
     dispose();
   });
@@ -214,7 +214,7 @@ describe('deterministic performance regressions', () => {
     for (let index = 0; index < 128; index += 1) form.unregister(`rows.${index}.name`);
 
     expect({ rows: form.values.rows.length, refs: form.refs.size, states: Object.keys(form.fieldState).length })
-      .toEqual({ rows: 128, refs: 0, states: 1 });
+      .toEqual({ rows: 128, refs: 0, states: 0 });
   });
 
   it('cleans all tracked resources after repeated register/unregister cycles', () => {

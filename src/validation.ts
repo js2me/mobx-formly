@@ -1,7 +1,7 @@
 import type { Ref } from 'yummies/mobx';
 import type {
   FieldError, FieldErrors, FieldPath, FieldValues, FormOptions, RegisterOptions, ResolverResult,
-  SchemaIssue, SchemaResult, StandardSchemaIssue, ValibotRunResult,
+  SchemaIssue, SchemaResult, StandardSchemaIssue, ValibotRunResult, ValidateResult,
 } from './types.js';
 import { findErrorAtPath, setAtPath } from './utils.js';
 
@@ -50,16 +50,16 @@ export class FormValidator<T extends FieldValues> {
     const schema = options.schema;
     if ('safeParseAsync' in schema) {
       const result = await schema.safeParseAsync(this.host.snapshot()) as SchemaResult<T>;
-      if (result.success) return { errors: {} };
+      if (result.success) return { errors: {}, values: result.data };
       return { errors: this.normalizeSchemaErrors(result.error) };
     }
     if ('~standard' in schema) {
       const result = await schema['~standard'].validate(this.host.snapshot());
-      if ('value' in result && !result.issues) return { errors: {} };
+      if ('value' in result && !result.issues) return { errors: {}, values: result.value as T };
       return { errors: this.normalizeSchemaErrors({ issues: result.issues ?? [] }) };
     }
     const result = await schema['~run']({ value: this.host.snapshot(), typed: false }, {}) as ValibotRunResult<T>;
-    if (!result.issues?.length) return { errors: {} };
+    if (!result.issues?.length) return { errors: {}, values: result.value as T };
     return { errors: this.normalizeSchemaErrors({ issues: result.issues }) };
   }
 
@@ -71,45 +71,48 @@ export class FormValidator<T extends FieldValues> {
     const firstOnly = this.host.options.criteriaMode !== 'all';
     const failures: Array<{ type: string; message?: string }> = [];
     /** Collects a failure; in firstError mode short-circuits validation like RHF. */
-    const add = (type: string, message: string | undefined): FieldError | undefined => {
-      const failure = { type, ...(message !== undefined ? { message } : {}) };
-      failures.push(failure);
-      return firstOnly ? failure : undefined;
+    const add = (type: string, messages: Array<string | undefined>): FieldError | undefined => {
+      for (const message of messages) failures.push({ type, ...(message !== undefined ? { message } : {}) });
+      return firstOnly && failures.length ? failures[0] : undefined;
     };
     let stop: FieldError | undefined;
     if (rules.required && (value === undefined || value === null || value === '')) {
-      stop = add('required', typeof rules.required === 'string' ? rules.required : undefined);
+      stop = add('required', [typeof rules.required === 'string' ? rules.required : undefined]);
       if (stop) return stop;
     }
     if (rules.minLength && String(value ?? '').length < rules.minLength.value) {
-      stop = add('minLength', rules.minLength.message);
+      stop = add('minLength', [rules.minLength.message]);
       if (stop) return stop;
     }
     if (rules.maxLength && String(value ?? '').length > rules.maxLength.value) {
-      stop = add('maxLength', rules.maxLength.message);
+      stop = add('maxLength', [rules.maxLength.message]);
       if (stop) return stop;
     }
     if (rules.min && Number(value) < rules.min.value) {
-      stop = add('min', rules.min.message);
+      stop = add('min', [rules.min.message]);
       if (stop) return stop;
     }
     if (rules.max && Number(value) > rules.max.value) {
-      stop = add('max', rules.max.message);
+      stop = add('max', [rules.max.message]);
       if (stop) return stop;
     }
     if (rules.pattern && !rules.pattern.value.test(String(value ?? ''))) {
-      stop = add('pattern', rules.pattern.message);
+      stop = add('pattern', [rules.pattern.message]);
       if (stop) return stop;
     }
     if (rules.validate && (!firstOnly || !failures.length)) {
-      let result: boolean | string;
-      try {
-        result = await rules.validate(value, this.host.snapshot());
-      } catch {
-        result = 'Validation failed';
-      }
-      if (result !== true) {
-        stop = add('validate', typeof result === 'string' ? result : undefined);
+      const validators = typeof rules.validate === 'function' ? { validate: rules.validate } : rules.validate;
+      for (const [type, validate] of Object.entries(validators)) {
+        let result: ValidateResult;
+        try {
+          result = await validate(value, this.host.snapshot());
+        } catch {
+          result = 'Validation failed';
+        }
+        if (result === true || result === undefined) continue;
+        const messages = Array.isArray(result) ? result : [typeof result === 'string' ? result : undefined];
+        if (!messages.length) continue;
+        stop = add(type, messages as Array<string | undefined>);
         if (stop) return stop;
       }
     }
@@ -117,8 +120,25 @@ export class FormValidator<T extends FieldValues> {
     return {
       type: failures[0].type,
       message: failures[0].message,
-      types: Object.fromEntries(failures.map((failure) => [failure.type, failure.message || true])),
+      types: this.collectRuleTypes(failures),
     };
+  }
+
+  /** Groups rule failures into the types map; repeated messages of one rule become arrays. */
+  private collectRuleTypes(failures: Array<{ type: string; message?: string }>): Record<string, string | true | string[]> {
+    const types: Record<string, string | true | string[]> = {};
+    for (const failure of failures) {
+      const message = failure.message ?? true;
+      const current = types[failure.type];
+      if (current === undefined) {
+        types[failure.type] = message;
+      } else if (Array.isArray(current)) {
+        if (typeof message === 'string' && !current.includes(message)) current.push(message);
+      } else if (current !== message && typeof current === 'string' && typeof message === 'string') {
+        types[failure.type] = [current, message];
+      }
+    }
+    return types;
   }
 
   /** Combines schema and rule errors for a field according to the criteria mode. */
