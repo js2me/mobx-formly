@@ -8,6 +8,9 @@ import { BaseForm, type Form } from '../../../src/index.js';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 type Values = { email: string };
+type Environment = 'dev' | 'stage' | 'prod';
+type Remote = { name: string; entry: string };
+type Configs = Record<Environment, { remotes: Remote[] }>;
 
 const EmailForm = observer(({ form, onValid }: { form: Form<Values>; onValid: (values: Values) => void }) => {
   const field = form.register('email', { required: 'Email is required' });
@@ -49,6 +52,23 @@ const ZodEmailForm = observer(({ form, onValid }: { form: Form<Values>; onValid:
       },
     }),
     form.errors.email?.message ? createElement('output', { role: 'alert' }, form.errors.email.message) : null,
+  );
+});
+
+const NestedConfigForm = observer(({ form }: { form: Form<Configs> }) => {
+  const activeEnvironment: Environment = 'dev';
+  const errors = form.errors[activeEnvironment]?.remotes?.[0];
+  return createElement(
+    'section',
+    undefined,
+    createElement('button', { onClick: () => form.trigger() }, 'Save all'),
+    createElement('input', {
+      name: 'name',
+      value: form.values[activeEnvironment].remotes[0]?.name ?? '',
+      readOnly: true,
+    }),
+    errors?.name?.message ? createElement('output', { role: 'alert' }, errors.name.message) : null,
+    errors?.entry?.message ? createElement('output', { role: 'alert' }, errors.entry.message) : null,
   );
 });
 
@@ -121,5 +141,39 @@ describe('React integration scenario', () => {
       await renderer.root.findByType('form').props.onSubmit({ preventDefault: vi.fn() });
     });
     expect(onValid).toHaveBeenCalledWith({ email: 'ada@example.test' }, form);
+  });
+
+  it('renders nested schema errors after Save all when the error path was initially absent', async () => {
+    const remoteSchema = z.object({
+      name: z.string().min(1, 'Name is required'),
+      entry: z.string().min(1, 'Entry is required'),
+    });
+    const form = new BaseForm<Configs>({
+      defaultValues: {
+        dev: { remotes: [{ name: '', entry: '' }] },
+        stage: { remotes: [] },
+        prod: { remotes: [] },
+      },
+      schema: z.object({
+        dev: z.object({ remotes: z.array(remoteSchema) }),
+        stage: z.object({ remotes: z.array(remoteSchema) }),
+        prod: z.object({ remotes: z.array(remoteSchema) }),
+      }),
+    });
+    let renderer!: ReactTestRenderer;
+
+    await act(async () => {
+      renderer = create(createElement(NestedConfigForm, { form }));
+    });
+    expect(renderer.root.findAllByProps({ role: 'alert' })).toEqual([]);
+
+    await act(async () => {
+      await renderer.root.findByType('button').props.onClick();
+    });
+
+    expect(renderer.root.findAllByProps({ role: 'alert' }).map((node) => node.children)).toEqual([
+      ['Name is required'],
+      ['Entry is required'],
+    ]);
   });
 });
