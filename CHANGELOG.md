@@ -1,5 +1,11 @@
 # mobx-formly
 
+## 0.1.1
+
+### Patch Changes
+
+- d0165ec: fix rerenders in react after submit
+
 ## 0.1.0
 
 ### Minor Changes
