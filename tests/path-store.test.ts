@@ -1,3 +1,4 @@
+import { autorun } from 'mobx';
 import { describe, expect, it } from 'vitest';
 import { PathStore } from '../src/path-store.js';
 
@@ -27,6 +28,23 @@ describe('PathStore', () => {
     });
     expect(first).toBe(second);
     expect(store.size).toBe(1);
+  });
+
+  it('reacts when a previously absent nested path is added or removed', () => {
+    const store = new PathStore<ReturnType<typeof makeState>>();
+    const tree = store.proxy() as Record<string, Record<string, ReturnType<typeof makeState>>>;
+    const observed: Array<boolean | undefined> = [];
+    const dispose = autorun(() => {
+      observed.push(tree.user?.name?.isTouched);
+    });
+
+    store.set('user.name', makeState());
+    store.delete('user.name');
+    dispose();
+
+    expect(observed[0]).toBeUndefined();
+    expect(observed).toContain(false);
+    expect(observed.at(-1)).toBeUndefined();
   });
 
   it('keeps parent branches alive while siblings exist', () => {

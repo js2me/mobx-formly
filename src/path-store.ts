@@ -10,8 +10,8 @@ import { observable } from 'mobx';
  */
 export class PathStore<V extends object> {
   private readonly store = observable.map<string, V>();
-  private readonly counts = new Map<string, number>();
-  private readonly children = new Map<string, Set<string>>();
+  private readonly counts = observable.map<string, number>();
+  private readonly children = observable.map<string, Set<string>>({}, { deep: false });
   private readonly proxies = new Map<string, object>();
 
   /** Whether a value is stored at the exact path. */
@@ -125,7 +125,10 @@ export class PathStore<V extends object> {
       this.counts.set(current, (this.counts.get(current) ?? 0) + 1);
       const parent = parts.slice(0, index - 1).join('.');
       let siblings = this.children.get(parent);
-      if (!siblings) this.children.set(parent, siblings = new Set());
+      if (!siblings) {
+        siblings = observable.set<string>();
+        this.children.set(parent, siblings);
+      }
       siblings.add(parts[index - 1]);
     }
   }
