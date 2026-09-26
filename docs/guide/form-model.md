@@ -31,7 +31,10 @@ The usual lifecycle is:
 | `isSubmitSuccessful` | Whether the latest submission passed validation and completed successfully. |
 | `submitCount` | How many times submission has been attempted. |
 | `disabled` | Whether registered input handlers ignore changes and blur events. |
-| `snapshot` | A plain copy of the current values, suitable for validation or side effects. |
+| `snapshot` | A detached clone of the current values, suitable for validation or side effects. |
+
+The table is a quick reference. The [Form API property reference](/api/form#form-properties)
+explains how each property changes and includes usage examples.
 
 ## What happens when an input changes
 
@@ -62,6 +65,14 @@ if (emailState?.invalid) {
 Use `errors.email` when only the error matters. Use `isSubmitting`, `isValid`, or
 the other aggregate properties for form-level UI such as submit buttons and
 loading indicators.
+
+For example, field-level feedback can wait until the field has been visited, while
+the submit button can depend on the aggregate form state:
+
+```ts
+const showEmailError = form.touchedFields.email && form.errors.email;
+const submitDisabled = !form.isValid || form.isSubmitting;
+```
 
 All of these properties are observable, so a MobX reaction updates when the part
 of the form it reads changes. Reading `fieldState.email` does not make a reaction

@@ -12,7 +12,7 @@ Additional validation options are `context`, `delayError`, and
 `shouldUseNativeValidation`. `shouldFocusError` defaults to `true` and focuses
 the first registered errored field after an invalid submit.
 
-## Observable properties
+## Form properties
 
 | Property | Description |
 | --- | --- |
@@ -32,7 +32,224 @@ the first registered errored field after an invalid submit.
 | `isSubmitSuccessful` | Whether the latest submit succeeded. |
 | `submitCount` | Number of submit attempts. |
 | `disabled` | Whether registered event handlers ignore changes and blur events. |
-| `snapshot` | A cloned plain copy of the current values. |
+| `snapshot` | A detached clone of the current values. |
+| `refs` | Map of field paths to stable refs used to focus registered fields. |
+
+Form state properties are observable or computed from observable state. Read them
+directly in a MobX `observer`, `autorun`, or `reaction`; a consumer only tracks the
+properties it reads. `refs` is a ref registry rather than form state. Examples
+assume `form` is a form created with `createForm()`.
+
+### `values`
+
+The live MobX tree containing current field values. Read it to render inputs or
+derive UI state. For an application-side update, prefer `setValue()` or `mutate()`
+so dirty, touched, and validation state stays in sync.
+
+```ts
+const email = form.values.email;
+form.setValue('email', 'ada@example.com');
+```
+
+Nested values can be read by normal property access and updated with a dot path:
+
+```ts
+const city = form.values.address.city;
+form.setValue('address.city', 'London');
+```
+
+### `defaultValues`
+
+The cached baseline for dirty comparison and for `reset()` / `resetField()`.
+Construction clones the supplied defaults. Calling `reset(nextValues)` updates
+the cached defaults with the supplied values unless `keepDefaultValues` is enabled.
+
+```ts
+const originalEmail = form.defaultValues.email;
+form.reset({ email: 'ada@example.com' });
+// The supplied email is now both the current value and the reset baseline.
+```
+
+### `errors`
+
+Validation and application errors, nested using the same paths as fields. An
+error contains a `type` and may contain a `message` and a `types` record. Errors
+can come from registered rules, a schema, a resolver, or `setError()`.
+
+```ts
+const message = form.errors.email?.message;
+const serverMessage = form.errors.root?.server?.message;
+```
+
+Use `clearErrors('email')` or `clearErrors()` to remove errors; assigning to
+`errors` is not the supported way to manage them.
+
+### `fieldState`
+
+Per-field observable state addressed by the field path. Each field state exposes
+`error`, `invalid`, `isDirty`, `isTouched`, and `isValidating`. Use this when a
+component needs several state values for one field; the nested shape also works
+for objects and array indexes.
+
+```ts
+const emailState = form.fieldState.email;
+if (emailState?.invalid) showError(emailState.error?.message);
+
+const firstItemInvalid = form.fieldState.items?.[0]?.invalid;
+```
+
+### `dirtyFields`
+
+A path-keyed record whose entries are `true` when the current field value differs
+from its default. Nested and array fields use dot paths such as `address.city`
+and `items.0.name`. Returning a value to its default removes that path. Use
+`isDirty` when the UI only needs the aggregate result.
+
+```ts
+if (form.dirtyFields['address.city']) showResetCityButton();
+const changedPaths = Object.keys(form.dirtyFields);
+```
+
+### `touchedFields`
+
+A path-keyed record of fields marked as visited. Registered `onBlur` marks a field
+touched. Programmatic `setValue()` and `mutate()` mark changed fields touched by
+default; pass `{ shouldTouch: false }` to opt out. This tracks interaction, not
+whether the value differs from its default.
+
+```ts
+if (form.touchedFields.email && form.errors.email) {
+  showError(form.errors.email.message);
+}
+form.setValue('email', 'imported@example.com', { shouldTouch: false });
+```
+
+### `validatingFields`
+
+A path-keyed record containing fields whose asynchronous validation is pending.
+Entries are removed when the applicable validation pass settles. A schema-level
+validation may involve multiple fields; use `isValidating` for a form-wide
+loading indicator.
+
+```ts
+if (form.validatingFields.email) showFieldSpinner('email');
+```
+
+### `isDirty`
+
+Computed as `true` when at least one entry exists in `dirtyFields`. It becomes
+`false` when all tracked values match their defaults or the dirty state is reset.
+
+```ts
+const saveEnabled = form.isDirty && !form.isSubmitting;
+```
+
+### `isTouched`
+
+Computed as `true` when at least one entry exists in `touchedFields`. It is useful
+for form-level UI that should appear only after the user has interacted with a
+field.
+
+```ts
+if (form.isTouched) showFormHelpText();
+```
+
+### `isValid`
+
+Indicates whether the form currently has no validation errors. If a schema or
+resolver is configured, the first read schedules a full validation pass; observe
+the property to receive its updated value when that pass completes. Without a
+schema or resolver it reflects the current error collection, so it starts `true`
+until errors are set or validation runs.
+
+```ts
+const canSubmit = form.isValid && !form.isSubmitting;
+```
+
+### `isValidating`
+
+Computed as `true` while one or more fields are being validated. This is suitable
+for a form-level spinner, while `validatingFields` can drive a spinner on a
+specific input.
+
+```ts
+const showValidationProgress = form.isValidating;
+```
+
+### `isSubmitting`
+
+`true` while one or more submit invocations are running, including validation and
+the selected submit callback. It returns to `false` after all active submissions
+finish.
+
+```ts
+const submitLabel = form.isSubmitting ? 'Saving…' : 'Save';
+```
+
+### `isSubmitted`
+
+Becomes `true` as soon as a submit attempt starts, whether validation passes or
+fails. `reset()` clears it unless `keepIsSubmitted` is set.
+
+```ts
+if (form.isSubmitted && !form.isValid) showSummary(form.errors);
+```
+
+### `isSubmitSuccessful`
+
+Becomes `true` after validation passes and the `onValid` callback completes. A
+validation failure sets it to `false`; if the callback rejects, the form does not
+set the flag to `true` for that attempt (a previous value is not automatically
+cleared). `reset()` clears this flag unless `keepIsSubmitSuccessful` is set.
+
+```ts
+if (form.isSubmitSuccessful) showToast('Changes saved');
+```
+
+### `submitCount`
+
+The number of times the returned `handleSubmit()` function has been invoked. It
+includes invalid attempts and resets to `0` with `reset()` unless
+`keepSubmitCount` is set.
+
+```ts
+const showErrors = form.submitCount > 0;
+```
+
+### `disabled`
+
+Reflects the `disabled` constructor option. When `true`, registered `onChange`
+and `onBlur` handlers do nothing. It does not set the DOM element's `disabled`
+attribute, so bind it to the UI separately when the input itself should be
+disabled.
+
+```ts
+const inputProps = { ...form.register('email'), disabled: form.disabled };
+```
+
+### `snapshot`
+
+Returns a detached clone of the current values at the time it is read. Use it to
+pass values to code that should not receive the live MobX tree. Mutating the
+snapshot does not update the form; read it again to get a fresh copy.
+
+```ts
+const payload = form.snapshot;
+await saveDraft(payload);
+```
+
+### `refs`
+
+A `Map` from field paths to stable MobX-aware element refs. `register(name)` uses
+the same ref as `form.ref(name)`. Refs are removed by `unregister(name)` and are
+used internally by `setFocus()` and validation's focus-on-error behavior.
+
+```ts
+const emailRef = form.refs.get('email');
+emailRef?.current?.focus();
+// Equivalent ref access without reading the map directly:
+form.ref('email').current?.focus();
+```
 
 ## Methods
 
