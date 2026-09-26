@@ -14,26 +14,26 @@ the first registered errored field after an invalid submit.
 
 ## Form properties
 
-| Property | Description |
-| --- | --- |
-| `values` | Current form values. Supports dot-path updates through `setValue`. |
-| `defaultValues` | Cached default values used by `reset`, `resetField`, and dirty comparison. Updated by `reset` unless `keepDefaultValues` is set. |
-| `errors` | Validation errors nested by field path. |
-| `fieldState` | Stable per-field state nested by field path: `error`, `invalid`, `isDirty`, `isTouched`, `isValidating`. |
-| `validatingFields` | Field paths currently being validated. |
-| `dirtyFields` | Dirty field paths. |
-| `touchedFields` | Touched field paths. |
-| `isDirty` | Computed aggregate dirty flag. |
-| `isTouched` | Computed aggregate touched flag. |
-| `isValid` | Computed aggregate validity flag. With a schema or resolver the first read schedules a full validation pass, so the flag reflects the schema instead of defaulting to true until something validates. |
-| `isValidating` | Computed aggregate flag for pending field validation. |
-| `isSubmitting` | Whether a submit handler is running. |
-| `isSubmitted` | Whether submit has been attempted. |
-| `isSubmitSuccessful` | Whether the latest submit succeeded. |
-| `submitCount` | Number of submit attempts. |
-| `disabled` | Whether registered event handlers ignore changes and blur events. |
-| `snapshot` | A detached clone of the current values. |
-| `refs` | Map of field paths to stable refs used to focus registered fields. |
+| Property             | Description                                                                                                                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `values`             | Current form values. Supports dot-path updates through `setValue`.                                                                                                                                    |
+| `defaultValues`      | Cached default values used by `reset`, `resetField`, and dirty comparison. Updated by `reset` unless `keepDefaultValues` is set.                                                                      |
+| `errors`             | Validation errors nested by field path.                                                                                                                                                               |
+| `fieldState`         | Stable per-field state nested by field path: `error`, `invalid`, `isDirty`, `isTouched`, `isValidating`.                                                                                              |
+| `validatingFields`   | Field paths currently being validated.                                                                                                                                                                |
+| `dirtyFields`        | Dirty field paths.                                                                                                                                                                                    |
+| `touchedFields`      | Touched field paths.                                                                                                                                                                                  |
+| `isDirty`            | Computed aggregate dirty flag.                                                                                                                                                                        |
+| `isTouched`          | Computed aggregate touched flag.                                                                                                                                                                      |
+| `isValid`            | Computed aggregate validity flag. With a schema or resolver the first read schedules a full validation pass, so the flag reflects the schema instead of defaulting to true until something validates. |
+| `isValidating`       | Computed aggregate flag for pending field validation.                                                                                                                                                 |
+| `isSubmitting`       | Whether a submit handler is running.                                                                                                                                                                  |
+| `isSubmitted`        | Whether submit has been attempted.                                                                                                                                                                    |
+| `isSubmitSuccessful` | Whether the latest submit succeeded.                                                                                                                                                                  |
+| `submitCount`        | Number of submit attempts.                                                                                                                                                                            |
+| `disabled`           | Whether registered event handlers ignore changes and blur events.                                                                                                                                     |
+| `snapshot`           | A detached clone of the current values.                                                                                                                                                               |
+| `refs`               | Map of field paths to stable refs used to focus registered fields.                                                                                                                                    |
 
 Form state properties are observable or computed from observable state. Read them
 directly in a MobX `observer`, `autorun`, or `reaction`; a consumer only tracks the
@@ -48,14 +48,14 @@ so dirty, touched, and validation state stays in sync.
 
 ```ts
 const email = form.values.email;
-form.setValue('email', 'ada@example.com');
+form.setValue("email", "ada@example.com");
 ```
 
 Nested values can be read by normal property access and updated with a dot path:
 
 ```ts
 const city = form.values.address.city;
-form.setValue('address.city', 'London');
+form.setValue("address.city", "London");
 ```
 
 ### `defaultValues`
@@ -66,7 +66,7 @@ the cached defaults with the supplied values unless `keepDefaultValues` is enabl
 
 ```ts
 const originalEmail = form.defaultValues.email;
-form.reset({ email: 'ada@example.com' });
+form.reset({ email: "ada@example.com" });
 // The supplied email is now both the current value and the reset baseline.
 ```
 
@@ -106,7 +106,7 @@ and `items.0.name`. Returning a value to its default removes that path. Use
 `isDirty` when the UI only needs the aggregate result.
 
 ```ts
-if (form.dirtyFields['address.city']) showResetCityButton();
+if (form.dirtyFields["address.city"]) showResetCityButton();
 const changedPaths = Object.keys(form.dirtyFields);
 ```
 
@@ -121,7 +121,7 @@ whether the value differs from its default.
 if (form.touchedFields.email && form.errors.email) {
   showError(form.errors.email.message);
 }
-form.setValue('email', 'imported@example.com', { shouldTouch: false });
+form.setValue("email", "imported@example.com", { shouldTouch: false });
 ```
 
 ### `validatingFields`
@@ -132,7 +132,7 @@ validation may involve multiple fields; use `isValidating` for a form-wide
 loading indicator.
 
 ```ts
-if (form.validatingFields.email) showFieldSpinner('email');
+if (form.validatingFields.email) showFieldSpinner("email");
 ```
 
 ### `isDirty`
@@ -183,7 +183,7 @@ the selected submit callback. It returns to `false` after all active submissions
 finish.
 
 ```ts
-const submitLabel = form.isSubmitting ? 'Saving…' : 'Save';
+const submitLabel = form.isSubmitting ? "Saving…" : "Save";
 ```
 
 ### `isSubmitted`
@@ -203,7 +203,7 @@ set the flag to `true` for that attempt (a previous value is not automatically
 cleared). `reset()` clears this flag unless `keepIsSubmitSuccessful` is set.
 
 ```ts
-if (form.isSubmitSuccessful) showToast('Changes saved');
+if (form.isSubmitSuccessful) showToast("Changes saved");
 ```
 
 ### `submitCount`
@@ -224,7 +224,7 @@ attribute, so bind it to the UI separately when the input itself should be
 disabled.
 
 ```ts
-const inputProps = { ...form.register('email'), disabled: form.disabled };
+const inputProps = { ...form.register("email"), disabled: form.disabled };
 ```
 
 ### `snapshot`
@@ -245,28 +245,28 @@ the same ref as `form.ref(name)`. Refs are removed by `unregister(name)` and are
 used internally by `setFocus()` and validation's focus-on-error behavior.
 
 ```ts
-const emailRef = form.refs.get('email');
+const emailRef = form.refs.get("email");
 emailRef?.current?.focus();
 // Equivalent ref access without reading the map directly:
-form.ref('email').current?.focus();
+form.ref("email").current?.focus();
 ```
 
 ## Methods
 
-| Method | Description |
-| --- | --- |
-| `register(name, options?)` | Returns `name`, `ref`, `onChange`, and `onBlur`. |
-| `ref(name)` | Returns a stable MobX-aware ref for a field path, creating it on demand. |
-| `unregister(name)` | Removes a field and its state. |
-| `setValue(name, value, config?)` | Updates a value and optionally marks or validates it. |
-| `mutate(mutator, config?)` | Groups several value changes into one form update, rebuilds dirty paths from the complete value tree, and can validate the complete form. |
-| `setError(name, error, config?)` | Sets a field error. `config.shouldFocus` focuses the field ref. |
-| `clearErrors(name?)` | Clears one, many, or all errors. |
-| `trigger(name?, config?)` | Runs schema and rule validation. `config.shouldTouch` marks targeted fields touched; `config.shouldFocus` focuses the first targeted error. |
-| `handleSubmit(handlers)` | Returns an async submit function. Validates before calling `onValid` or `onInvalid`. `onValid` receives schema or resolver output values, so schema transforms and coercions reach the submit handler. |
-| `reset(values?, options?)` | Resets values and selected form state. Passed values become defaults unless `keepDefaultValues` is true. |
-| `resetField(name, options?)` | Resets one field to its default and can preserve dirty, touched, or error state, or set a new field default. |
-| `setFocus(name)` | Focuses the field ref when available. |
+| Method                           | Description                                                                                                                                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `register(name, options?)`       | Returns `name`, `ref`, `onChange`, and `onBlur`.                                                                                                                                                       |
+| `ref(name)`                      | Returns a stable MobX-aware ref for a field path, creating it on demand.                                                                                                                               |
+| `unregister(name)`               | Removes a field and its state.                                                                                                                                                                         |
+| `setValue(name, value, config?)` | Updates a value and optionally marks or validates it.                                                                                                                                                  |
+| `mutate(mutator, config?)`       | Groups several value changes into one form update, rebuilds dirty paths from the complete value tree, and can validate the complete form.                                                              |
+| `setError(name, error, config?)` | Sets a field error. `config.shouldFocus` focuses the field ref.                                                                                                                                        |
+| `clearErrors(name?)`             | Clears one, many, or all errors.                                                                                                                                                                       |
+| `trigger(name?, config?)`        | Runs schema and rule validation. `config.shouldTouch` marks targeted fields touched; `config.shouldFocus` focuses the first targeted error.                                                            |
+| `handleSubmit(handlers)`         | Returns an async submit function. Validates before calling `onValid` or `onInvalid`. `onValid` receives schema or resolver output values, so schema transforms and coercions reach the submit handler. |
+| `reset(values?, options?)`       | Resets values and selected form state. Passed values become defaults unless `keepDefaultValues` is true.                                                                                               |
+| `resetField(name, options?)`     | Resets one field to its default and can preserve dirty, touched, or error state, or set a new field default.                                                                                           |
+| `setFocus(name)`                 | Focuses the field ref when available.                                                                                                                                                                  |
 
 ## Resolver and schemas
 
@@ -284,16 +284,16 @@ plain values and return promises because validation may be asynchronous.
 
 Supported registration options:
 
-| Option | Description |
-| --- | --- |
-| `required` | `boolean` or error message. |
-| `minLength`, `maxLength` | Length limit with optional message. |
-| `min`, `max` | Numeric limit with optional message. |
-| `pattern` | Regular expression with optional message. |
-| `validate` | Sync or async custom validator receiving `(value, values)`, or a record of named validators whose keys become error types. A validator may return an array of messages. |
-| `deps` | One or several field paths re-validated whenever this field changes. |
-| `valueAsNumber`, `valueAsDate` | Convert event values before storing them. |
-| `setValueAs` | Custom value transformation. |
+| Option                         | Description                                                                                                                                                             |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `required`                     | `boolean` or error message.                                                                                                                                             |
+| `minLength`, `maxLength`       | Length limit with optional message.                                                                                                                                     |
+| `min`, `max`                   | Numeric limit with optional message.                                                                                                                                    |
+| `pattern`                      | Regular expression with optional message.                                                                                                                               |
+| `validate`                     | Sync or async custom validator receiving `(value, values)`, or a record of named validators whose keys become error types. A validator may return an array of messages. |
+| `deps`                         | One or several field paths re-validated whenever this field changes.                                                                                                    |
+| `valueAsNumber`, `valueAsDate` | Convert event values before storing them.                                                                                                                               |
+| `setValueAs`                   | Custom value transformation.                                                                                                                                            |
 
 ## `ref(name)`
 
@@ -328,7 +328,7 @@ Use normal MobX mutations inside `mutate`:
 ```ts
 form.mutate(() => {
   form.values.items.splice(1, 1);
-  form.values.items.push({ name: 'New item' });
+  form.values.items.push({ name: "New item" });
 });
 ```
 
@@ -360,8 +360,8 @@ Use a root namespace for server or form-level errors that do not belong to a
 field:
 
 ```ts
-form.setError('root.server', { type: 'server', message: 'Try again' });
-form.clearErrors('root');
+form.setError("root.server", { type: "server", message: "Try again" });
+form.clearErrors("root");
 ```
 
 `Map<string, V>` fields support dot paths through string keys, for example
