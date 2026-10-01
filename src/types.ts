@@ -113,15 +113,17 @@ export type ErrorNamespacePath = 'root' | `root.${string}`;
 export type GlobalErrors = FieldError & Record<string, FieldError | undefined>;
 
 type FieldErrorTree<V> =
-  V extends readonly (infer I)[]
-    ? FieldError & Array<I extends object ? FieldErrors<I> : FieldError | undefined>
-    : V extends ReadonlyMap<infer MapKey, infer MapValue>
-      ? FieldError & (MapKey extends string ? { [K in MapKey]?: FieldErrorTree<MapValue> } : {})
-      : V extends Date | RegExp | ReadonlySet<unknown>
-        ? FieldError
-        : V extends object
-          ? FieldError & FieldErrors<V>
-          : FieldError;
+  V extends null | undefined
+    ? never
+    : V extends readonly (infer I)[]
+      ? FieldError & Array<I extends object ? FieldErrors<I> : FieldError | undefined>
+      : V extends ReadonlyMap<infer MapKey, infer MapValue>
+        ? FieldError & (MapKey extends string ? { [K in MapKey]?: FieldErrorTree<MapValue> } : {})
+        : V extends Date | RegExp | ReadonlySet<unknown>
+          ? FieldError
+          : V extends object
+            ? FieldError & FieldErrors<V>
+            : FieldError;
 
 export type FieldErrors<T extends object = FieldValues> = {
   [K in keyof T]?: FieldErrorTree<T[K]>;

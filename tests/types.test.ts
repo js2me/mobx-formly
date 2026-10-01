@@ -63,6 +63,22 @@ test('exposes nested errors through the value tree', () => {
   expectTypeOf(form.fieldState.remotes?.[0]?.name?.isValidating).toEqualTypeOf<boolean | undefined>();
 });
 
+test('exposes indexed errors for optional and nullable array fields', () => {
+  const form = new BaseForm<{
+    banners?: Array<{ title: string }>;
+    archived: Array<{ title: string }> | null;
+    settings?: { name: string };
+  }>({
+    defaultValues: { banners: [{ title: '' }], archived: null },
+  });
+
+  const bannerErrorList = form.errors.banners;
+  const bannerErrors = bannerErrorList?.[0];
+  expectTypeOf(bannerErrors?.title).toEqualTypeOf<import('../src/index.js').FieldError | undefined>();
+  expectTypeOf(form.errors.archived?.[0]?.title).toEqualTypeOf<import('../src/index.js').FieldError | undefined>();
+  expectTypeOf(form.errors.settings?.name).toEqualTypeOf<import('../src/index.js').FieldError | undefined>();
+});
+
 test('infers Map field paths, root errors, and async mutate results', () => {
   const form = new BaseForm<{ settings: Map<'primary', { enabled: boolean }> }>({
     defaultValues: { settings: new Map([['primary', { enabled: true }]]) },
