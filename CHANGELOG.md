@@ -1,5 +1,11 @@
 # mobx-formly
 
+## 0.1.2
+
+### Patch Changes
+
+- 33b0453: fixed typings for array fields
+
 ## 0.1.1
 
 ### Patch Changes
