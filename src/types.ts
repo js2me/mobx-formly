@@ -240,6 +240,10 @@ export interface FormOptions<T extends FieldValues> {
   shouldUseNativeValidation?: boolean;
   shouldFocusError?: boolean;
   disabled?: boolean;
+  /** Called by `handleSubmit(event)` after validation passes. */
+  onValid?: SubmitHandlers<T>['onValid'];
+  /** Called by `handleSubmit(event)` after validation fails. */
+  onInvalid?: SubmitHandlers<T>['onInvalid'];
 }
 
 export interface ResolverOptions<T extends FieldValues> {
@@ -262,4 +266,9 @@ export type Resolver<T extends FieldValues = FieldValues, TTransformedValues = T
 export interface SubmitHandlers<T extends FieldValues> {
   onValid: (values: T, form: unknown) => void | Promise<void>;
   onInvalid?: (errors: FieldErrors<T>, form: unknown) => void | Promise<void>;
+}
+
+/** Minimal submit event shape accepted by `handleSubmit(event)`. */
+export interface SubmitEvent {
+  preventDefault(): void;
 }

@@ -2,7 +2,7 @@ import { autorun } from 'mobx';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import * as v from 'valibot';
-import { createForm, BaseForm } from '../src/index.js';
+import { createForm, BaseForm, FormValidationError } from '../src/index.js';
 import { deleteAtPath, extractValue, getAtPath, setAtPath } from '../src/utils.js';
 
 describe('Form', () => {
@@ -590,5 +590,46 @@ describe('Form', () => {
     expect(await form.trigger()).toBe(true);
     expect(form.errors.username).toBeUndefined();
     expect(form.errors.confirmation).toBeUndefined();
+  });
+
+  it('submit() resolves with schema output or throws FormValidationError', async () => {
+    const form = new BaseForm({
+      defaultValues: { email: '' },
+      schema: z.object({ email: z.string().email('Invalid email').transform((email) => email.toUpperCase()) }),
+    });
+
+    const error = await form.submit().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(FormValidationError);
+    expect((error as FormValidationError).errors.email).toEqual({ type: 'invalid_format', message: 'Invalid email' });
+    expect(form.isSubmitSuccessful).toBe(false);
+
+    form.setValue('email', 'ada@example.test');
+    await expect(form.submit()).resolves.toEqual({ email: 'ADA@EXAMPLE.TEST' });
+    expect(form.isSubmitSuccessful).toBe(true);
+    expect(form.submitCount).toBe(2);
+  });
+
+  it('handleSubmit(event) prevents default and runs option handlers', async () => {
+    const onValid = vi.fn();
+    const onInvalid = vi.fn();
+    const form = new BaseForm({
+      defaultValues: { email: '' },
+      schema: z.object({ email: z.string().email('Invalid email') }),
+      onValid,
+      onInvalid,
+    });
+    const { handleSubmit } = form;
+    const event = { preventDefault: vi.fn() };
+
+    await handleSubmit(event);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(onInvalid).toHaveBeenCalledWith(form.errors, form);
+    expect(onValid).not.toHaveBeenCalled();
+
+    form.setValue('email', 'ada@example.test');
+    await handleSubmit();
+    expect(onValid).toHaveBeenCalledWith({ email: 'ada@example.test' }, form);
+    expect(form.isSubmitSuccessful).toBe(true);
+    expect(form.submitCount).toBe(2);
   });
 });

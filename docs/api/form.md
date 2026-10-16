@@ -12,6 +12,9 @@ Additional validation options are `context`, `delayError`, and
 `shouldUseNativeValidation`. `shouldFocusError` defaults to `true` and focuses
 the first registered errored field after an invalid submit.
 
+`onValid` and `onInvalid` are optional submit callbacks used by
+`handleSubmit(event?)`.
+
 ## Form properties
 
 | Property             | Description                                                                                                                                                                                           |
@@ -264,9 +267,46 @@ form.ref("email").current?.focus();
 | `clearErrors(name?)`             | Clears one, many, or all errors.                                                                                                                                                                       |
 | `trigger(name?, config?)`        | Runs schema and rule validation. `config.shouldTouch` marks targeted fields touched; `config.shouldFocus` focuses the first targeted error.                                                            |
 | `handleSubmit(handlers)`         | Returns an async submit function. Validates before calling `onValid` or `onInvalid`. `onValid` receives schema or resolver output values, so schema transforms and coercions reach the submit handler. |
+| `handleSubmit(event?)`   | Bound overload: calls `event.preventDefault()` and submits with `onValid` / `onInvalid` from form options. Use as `<form onSubmit={form.handleSubmit}>`.                                                         |
+| `submit()`               | Validates and submits. Resolves with validated (schema/resolver output) values; rejects with `FormValidationError` (has `errors`) when invalid.                                                                 |
 | `reset(values?, options?)`       | Resets values and selected form state. Passed values become defaults unless `keepDefaultValues` is true.                                                                                               |
 | `resetField(name, options?)`     | Resets one field to its default and can preserve dirty, touched, or error state, or set a new field default.                                                                                           |
 | `setFocus(name)`                 | Focuses the field ref when available.                                                                                                                                                                  |
+
+## `handleSubmit(event?)`
+
+When called with a submit event (or nothing) instead of handlers, `handleSubmit`
+calls `event.preventDefault()` and submits right away using the `onValid` and
+`onInvalid` callbacks from the form options. The method is bound, so it can be
+passed directly as a form submit handler.
+
+```tsx
+const form = new BaseForm({
+  defaultValues: { email: "" },
+  onValid: (values) => api.save(values),
+  onInvalid: (errors) => console.warn(errors),
+});
+
+<form onSubmit={form.handleSubmit}>...</form>;
+```
+
+## `submit()`
+
+Promise-based alternative to `handleSubmit()`. Updates the same submit state
+(`isSubmitting`, `isSubmitted`, `isSubmitSuccessful`, `submitCount`) and focuses
+the first error when `shouldFocusError` is enabled. Resolves with validated values;
+throws `FormValidationError` with `errors` when validation fails.
+
+```ts
+import { FormValidationError } from "mobx-formly";
+
+try {
+  const values = await form.submit();
+  await api.save(values);
+} catch (error) {
+  if (!(error instanceof FormValidationError)) throw error;
+}
+```
 
 ## Resolver and schemas
 

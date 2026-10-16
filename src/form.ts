@@ -3,7 +3,7 @@ import { createRef, type Ref } from 'yummies/mobx';
 import type {
   ErrorNamespacePath, FieldError, FieldErrors, FieldPath, FieldPathValue, FieldState, FieldStateTree, FieldValues,
   FormOptions, RegisterOptions, RegisterReturn, ResetFieldOptions, ResetOptions, SetErrorConfig, SetValueConfig,
-  SubmitHandlers, TriggerConfig,
+  SubmitEvent, SubmitHandlers, TriggerConfig,
 } from './types.js';
 import { clone, deleteAtPath, extractValue, getAtPath, isEqual, setAtPath } from './utils.js';
 import { collectChangedPaths, collectDirtyPaths, collectErrorPaths, findErrorAtPath } from './utils.js';
@@ -12,6 +12,18 @@ import { FormValidator } from './validation.js';
 
 const isPromiseLike = (value: unknown): value is Promise<void> =>
   !!value && typeof (value as Promise<void>).then === 'function';
+
+/**
+ * Error thrown by `form.submit()` when validation fails.
+ *
+ * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#submit)
+ */
+export class FormValidationError<T extends FieldValues = FieldValues> extends Error {
+  constructor(public readonly errors: FieldErrors<T>) {
+    super('Form validation failed');
+    this.name = 'FormValidationError';
+  }
+}
 
 /**
  * Public form contract returned by `createForm()` and implemented by `BaseForm`.
@@ -189,6 +201,20 @@ export interface Form<T extends FieldValues = FieldValues> {
    */
   handleSubmit(handlers: SubmitHandlers<T>): () => Promise<void>;
   /**
+   * Prevents the event default and submits with `onValid` / `onInvalid` from form options.
+   * Bound to the form, so it can be passed directly as `<form onSubmit={form.handleSubmit}>`.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#handlesubmithandlers)
+   */
+  handleSubmit(event?: SubmitEvent): Promise<void>;
+  /**
+   * Validates and submits the form. Resolves with validated values or rejects
+   * with `FormValidationError` when validation fails.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#submit)
+   */
+  submit(): Promise<T>;
+  /**
    * Resets values and selected form state.
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#resetvalues-options)
@@ -345,7 +371,8 @@ export class BaseForm<T extends FieldValues = FieldValues> implements Form<T> {
       setError: action,
       clearErrors: action,
       trigger: action,
-      handleSubmit: action,
+      handleSubmit: action.bound,
+      submit: action,
       reset: action,
       resetField: action,
       setFocus: action,
@@ -606,7 +633,21 @@ export class BaseForm<T extends FieldValues = FieldValues> implements Form<T> {
    *
    * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#handlesubmithandlers)
    */
-  handleSubmit({ onValid, onInvalid }: SubmitHandlers<T>): () => Promise<void> {
+  handleSubmit(handlers: SubmitHandlers<T>): () => Promise<void>;
+  /**
+   * Prevents the event default and submits with `onValid` / `onInvalid` from form options.
+   * Bound to the form, so it can be passed directly as `<form onSubmit={form.handleSubmit}>`.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#handlesubmithandlers)
+   */
+  handleSubmit(event?: SubmitEvent): Promise<void>;
+  handleSubmit(arg?: SubmitHandlers<T> | SubmitEvent): (() => Promise<void>) | Promise<void> {
+    if (arg && 'onValid' in arg) return this.createSubmitHandler(arg);
+    arg?.preventDefault();
+    return this.createSubmitHandler(this.options)();
+  }
+
+  private createSubmitHandler({ onValid, onInvalid }: Partial<SubmitHandlers<T>>): () => Promise<void> {
     return async () => {
       this.activeSubmissions += 1;
       this.isSubmitting = true;
@@ -616,7 +657,7 @@ export class BaseForm<T extends FieldValues = FieldValues> implements Form<T> {
       try {
         const { valid, values } = await this.runValidation();
         if (valid) {
-          await onValid(values ?? this.snapshot, this);
+          await onValid?.(values ?? this.snapshot, this);
           runInAction(() => {
             if (this.resetVersion === submissionResetVersion) this.isSubmitSuccessful = true;
           });
@@ -634,6 +675,22 @@ export class BaseForm<T extends FieldValues = FieldValues> implements Form<T> {
         });
       }
     };
+  }
+
+  /**
+   * Validates and submits the form. Resolves with validated values or rejects
+   * with `FormValidationError` when validation fails.
+   *
+   * [**Documentation**](https://js2me.github.io/mobx-formly/api/form.html#submit)
+   */
+  async submit(): Promise<T> {
+    let result: { values: T } | { errors: FieldErrors<T> } | undefined;
+    await this.createSubmitHandler({
+      onValid: (values) => { result = { values }; },
+      onInvalid: (errors) => { result = { errors }; },
+    })();
+    if (!result || 'errors' in result) throw new FormValidationError<T>(result?.errors ?? {});
+    return result.values;
   }
 
   /**
