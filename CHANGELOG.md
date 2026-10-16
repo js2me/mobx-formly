@@ -1,5 +1,12 @@
 # mobx-formly
 
+## 0.2.0
+
+### Minor Changes
+
+- 0e0ee38: added `form.submit()` which resolves with validated values or throws `FormValidationError`
+  added `handleSubmit(event?)` overload (bound) that calls `preventDefault()` and submits with `onValid` / `onInvalid` from form options
+
 ## 0.1.2
 
 ### Patch Changes
